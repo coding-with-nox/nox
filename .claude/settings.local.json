@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(BASE=\"c:/Users/tommaso.nocentini/OneDrive - Skynet Technology/Desktop/Progetti/nox/projects/hitl-multi-agents-orchestration\")",
+      "Read(//c/Users/tommaso.nocentini/OneDrive - Skynet Technology/Desktop/Progetti/nox/projects/hitl-multi-agents-orchestration/**)",
+      "Bash(dotnet add:*)",
+      "Bash(__NEW_LINE_39a171b6b3e10787__ echo:*)",
+      "Bash(BASE=\"c:/Users/tommaso.nocentini/OneDrive - Skynet Technology/Desktop/Progetti/nox/projects/hitl-multi-agents-orchestration\" cd \"$BASE\" __NEW_LINE_948dce65a6d64b7f__ dotnet add src/Nox.Api/Nox.Api.csproj package Serilog.AspNetCore --version 9.0.0)",
+      "Bash(BASE=\"c:/Users/tommaso.nocentini/OneDrive - Skynet Technology/Desktop/Progetti/nox/projects/hitl-multi-agents-orchestration\" cd \"$BASE\" dotnet build Nox.sln)",
+      "Bash(dotnet build:*)",
+      "Read(//c/Users/tommaso.nocentini/OneDrive - Skynet Technology/Desktop/Progetti/nox/projects/hitl-multi-agents-orchestration/$USERPROFILE/.nuget/packages/microsoft.extensions.ai.abstractions/9.5.0/lib/net9.0/**)"
+    ]
+  }
+}
