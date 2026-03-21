@@ -1,0 +1,171 @@
+@page "/hitl"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Nox.Domain
+@using Nox.Domain.Hitl
+@inject NavigationManager Navigation
+@inject IHitlQueue HitlQueue
+@implements IAsyncDisposable
+
+<PageTitle>HITL Review Queue — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>🧑‍💼 HITL Review Queue</h2>
+        <span class="badge bg-@(IsConnected ? "success" : "warning")">
+            @(IsConnected ? "Live" : "Connecting...")
+        </span>
+    </div>
+
+    @if (_checkpoints.Count == 0)
+    {
+        <div class="alert alert-info">No pending checkpoints. The agents are working...</div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var cp in _checkpoints.OrderBy(c => c.ExpiresAt ?? DateTimeOffset.MaxValue))
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="card border-@GetBorderColor(cp.Type)">
+                        <div class="card-header d-flex justify-content-between">
+                            <span>
+                                <span class="badge bg-secondary me-2">@cp.Type</span>
+                                <strong>@cp.Title</strong>
+                            </span>
+                            @if (cp.ExpiresAt.HasValue)
+                            {
+                                <small class="text-muted">Expires: @cp.ExpiresAt.Value.ToString("HH:mm")</small>
+                            }
+                        </div>
+                        <div class="card-body">
+                            @if (cp.Description is not null)
+                            {
+                                <p class="text-muted small">@cp.Description</p>
+                            }
+                            <pre class="bg-light p-2 rounded small" style="max-height:200px;overflow:auto">@cp.Context.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                        </div>
+                        <div class="card-footer d-flex gap-2">
+                            @if (cp.Type == CheckpointType.MultiChoice && cp.DecisionOptions?.Any() == true)
+                            {
+                                @foreach (var opt in cp.DecisionOptions)
+                                {
+                                    <button class="btn btn-outline-primary btn-sm" @onclick="() => Decide(cp.Id, opt)">@opt</button>
+                                }
+                            }
+                            else
+                            {
+                                <button class="btn btn-success btn-sm" @onclick='() => Decide(cp.Id, "Approved")'>
+                                    ✓ Approve
+                                </button>
+                                <button class="btn btn-danger btn-sm" @onclick='() => Decide(cp.Id, "Rejected")'>
+                                    ✗ Reject
+                                </button>
+                            }
+                            <button class="btn btn-warning btn-sm ms-auto" @onclick="() => Escalate(cp.Id)">
+                                ↑ Escalate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_recentDecisions.Count > 0)
+    {
+        <h4 class="mt-4">Recent Decisions</h4>
+        <table class="table table-sm">
+            <thead><tr><th>Title</th><th>Decision</th><th>By</th><th>At</th></tr></thead>
+            <tbody>
+                @foreach (var d in _recentDecisions.Take(10))
+                {
+                    <tr>
+                        <td>@d.Title</td>
+                        <td><span class="badge bg-@(d.Decision == "Approved" ? "success" : "danger")">@d.Decision</span></td>
+                        <td>@d.DecisionBy</td>
+                        <td>@d.ResolvedAt?.ToString("HH:mm:ss")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<HitlCheckpoint> _checkpoints = [];
+    private List<HitlCheckpoint> _recentDecisions = [];
+    private HubConnection? _hubConnection;
+    private bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _checkpoints = await HitlQueue.GetAllPendingAsync();
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/hitl"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<object>("CheckpointCreated", _ =>
+        {
+            _ = InvokeAsync(async () =>
+            {
+                _checkpoints = await HitlQueue.GetAllPendingAsync();
+                StateHasChanged();
+            });
+        });
+
+        _hubConnection.On<object>("CheckpointResolved", _ =>
+        {
+            _ = InvokeAsync(async () =>
+            {
+                _checkpoints = await HitlQueue.GetAllPendingAsync();
+                StateHasChanged();
+            });
+        });
+
+        await _hubConnection.StartAsync();
+    }
+
+    private async Task Decide(Guid checkpointId, string decision)
+    {
+        await HitlQueue.SubmitDecisionAsync(checkpointId, new HitlDecision
+        {
+            CheckpointId = checkpointId,
+            Decision = decision,
+            DecidedBy = "HITL User"
+        });
+
+        var resolved = _checkpoints.FirstOrDefault(c => c.Id == checkpointId);
+        if (resolved is not null)
+        {
+            resolved.Decision = decision;
+            resolved.ResolvedAt = DateTimeOffset.UtcNow;
+            _recentDecisions.Insert(0, resolved);
+            _checkpoints.Remove(resolved);
+        }
+        StateHasChanged();
+    }
+
+    private async Task Escalate(Guid checkpointId)
+    {
+        await HitlQueue.EscalateAsync(checkpointId, "Escalated by HITL user");
+        _checkpoints.RemoveAll(c => c.Id == checkpointId);
+        StateHasChanged();
+    }
+
+    private static string GetBorderColor(CheckpointType type) => type switch
+    {
+        CheckpointType.Approval => "success",
+        CheckpointType.Review => "primary",
+        CheckpointType.DataInput => "info",
+        CheckpointType.Veto => "danger",
+        _ => "secondary"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
+}

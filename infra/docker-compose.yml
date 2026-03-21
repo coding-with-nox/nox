@@ -1,0 +1,85 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nox-postgres
+    environment:
+      POSTGRES_USER: nox
+      POSTGRES_PASSWORD: nox_secret
+      POSTGRES_DB: nox
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nox -d nox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-orleans:
+    image: postgres:16-alpine
+    container_name: nox-postgres-orleans
+    environment:
+      POSTGRES_USER: nox
+      POSTGRES_PASSWORD: nox_secret
+      POSTGRES_DB: nox_orleans
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_orleans_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nox -d nox_orleans"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nox-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: nox-qdrant
+    ports:
+      - "6333:6333"   # HTTP
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  seq:
+    image: datalust/seq:latest
+    container_name: nox-seq
+    environment:
+      ACCEPT_EULA: Y
+    ports:
+      - "5341:5341"   # ingestion
+      - "8081:80"     # UI (mapped to avoid conflict with app)
+    volumes:
+      - seq_data:/data
+
+volumes:
+  postgres_data:
+  postgres_orleans_data:
+  redis_data:
+  qdrant_data:
+  seq_data:

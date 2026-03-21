@@ -1,0 +1,54 @@
+# Build output
+bin/
+obj/
+out/
+
+# .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vs/
+.vs/
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+!**/[Pp]ackages/build/
+
+# Rider/VS/VSCode
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets & config overrides
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Secrets.json
+secrets.json
+**/*.pfx
+**/*.key
+
+# Logs
+logs/
+*.log
+Seq/
+
+# Docker volumes / data
+infra/data/
+infra/postgres/data/
+infra/qdrant/storage/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code session memory (project-local)
+.claude/projects/

@@ -1,0 +1,126 @@
+@page "/skills"
+@using Nox.Domain
+@using Nox.Domain.Skills
+@using Nox.Infrastructure.Persistence
+@using Microsoft.EntityFrameworkCore
+@inject NoxDbContext Db
+@inject ISkillRegistry SkillRegistry
+
+<PageTitle>Skill Approval — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <h2>⚡ Skill Registry & Approval</h2>
+
+    <!-- Pending Approvals -->
+    <h4 class="mt-3">Pending Approval</h4>
+    @if (!_pendingSkills.Any())
+    {
+        <div class="alert alert-info">No skills pending approval.</div>
+    }
+    else
+    {
+        @foreach (var skill in _pendingSkills)
+        {
+            <div class="card mb-2 border-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6><code>/@skill.Slug</code> — @skill.Name</h6>
+                            <p class="text-muted small mb-1">@skill.Description</p>
+                            <span class="badge bg-secondary me-1">@skill.Type</span>
+                            <span class="badge bg-light text-dark me-1">@skill.Scope</span>
+                            @if (skill.OwnerAgentId.HasValue)
+                            {
+                                <span class="badge bg-info">Proposed by agent</span>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success btn-sm" @onclick="() => Approve(skill.Id)">Approve</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => Reject(skill.Id)">Reject</button>
+                        </div>
+                    </div>
+                    <details class="mt-2">
+                        <summary class="small text-muted">Definition</summary>
+                        <pre class="small bg-light p-2 rounded mt-1">@skill.Definition.ToJsonString(new System.Text.Json.JsonSerializerOptions{WriteIndented=true})</pre>
+                    </details>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- Active Skills -->
+    <h4 class="mt-4">Active Skills</h4>
+    <div class="mb-2">
+        <input type="text" class="form-control w-auto d-inline-block" placeholder="Filter by slug or name..."
+               @bind="_filter" @bind:event="oninput" />
+    </div>
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Slug</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Scope</th>
+                <th>Status</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var skill in FilteredActiveSkills)
+            {
+                <tr>
+                    <td><code>/@skill.Slug</code></td>
+                    <td>@skill.Name</td>
+                    <td><span class="badge bg-secondary">@skill.Type</span></td>
+                    <td><span class="badge bg-light text-dark">@skill.Scope</span></td>
+                    <td><span class="badge bg-@GetStatusColor(skill.Status)">@skill.Status</span></td>
+                    <td>@skill.CreatedAt.ToString("dd/MM/yy")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<Skill> _skills = [];
+    private List<Skill> _pendingSkills = [];
+    private string _filter = string.Empty;
+
+    private IEnumerable<Skill> FilteredActiveSkills => _skills
+        .Where(s => s.Status == SkillStatus.Active)
+        .Where(s => string.IsNullOrEmpty(_filter) ||
+                    s.Slug.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                    s.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _skills = await Db.Skills.OrderBy(s => s.Scope).ThenBy(s => s.Slug).ToListAsync();
+        _pendingSkills = _skills.Where(s => s.Status == SkillStatus.PendingApproval).ToList();
+    }
+
+    private async Task Approve(Guid id)
+    {
+        await SkillRegistry.ApproveSkillAsync(id, "HITL User");
+        await Reload();
+    }
+
+    private async Task Reject(Guid id)
+    {
+        await SkillRegistry.RejectSkillAsync(id, "HITL User", "Rejected via dashboard");
+        await Reload();
+    }
+
+    private static string GetStatusColor(SkillStatus s) => s switch
+    {
+        SkillStatus.Active => "success",
+        SkillStatus.PendingApproval => "warning",
+        SkillStatus.Rejected => "danger",
+        SkillStatus.Deprecated => "secondary",
+        _ => "secondary"
+    };
+}

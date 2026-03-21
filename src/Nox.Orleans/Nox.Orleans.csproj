@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nox.Domain\Nox.Domain.csproj" />
+    <ProjectReference Include="..\Nox.Application\Nox.Application.csproj" />
+    <ProjectReference Include="..\Nox.Infrastructure\Nox.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Core" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Reminders.Redis" Version="9.1.2" />
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

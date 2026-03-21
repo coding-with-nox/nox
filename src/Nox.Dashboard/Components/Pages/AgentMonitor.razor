@@ -1,0 +1,131 @@
+@page "/agents"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Nox.Domain
+@using Nox.Domain.Agents
+@using Nox.Infrastructure.Persistence
+@using Microsoft.EntityFrameworkCore
+@inject NavigationManager Navigation
+@inject NoxDbContext Db
+@implements IAsyncDisposable
+
+<PageTitle>Agent Monitor — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <h2>🤖 Agent Monitor</h2>
+
+    <div class="mb-3">
+        <label class="form-label">Filter by Flow Run</label>
+        <input type="text" class="form-control w-auto d-inline-block" placeholder="Flow Run ID"
+               @bind="_filterRunId" @bind:event="oninput" />
+        <button class="btn btn-outline-secondary btn-sm ms-2" @onclick="Refresh">Refresh</button>
+    </div>
+
+    @if (_agents.Count == 0)
+    {
+        <div class="alert alert-secondary">No agents found. Start a flow run to see agents here.</div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var agent in _agents)
+            {
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100 border-@GetStatusColor(agent.Status)">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>@agent.Name</strong>
+                                <span class="text-muted ms-1 small">(@agent.Role)</span>
+                            </div>
+                            <span class="badge bg-@GetStatusColor(agent.Status)">@agent.Status</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center mb-2">
+                                <div class="col">
+                                    <div class="small text-muted">Model</div>
+                                    <strong class="small">@agent.Model</strong>
+                                </div>
+                                <div class="col">
+                                    <div class="small text-muted">Tokens</div>
+                                    <strong class="small">@agent.TokensUsed.ToString("N0")</strong>
+                                </div>
+                                <div class="col">
+                                    <div class="small text-muted">Sub-agents</div>
+                                    <strong class="small">@agent.CurrentSubAgentCount / @agent.MaxSubAgents</strong>
+                                </div>
+                            </div>
+
+                            <!-- Token usage bar -->
+                            <div class="progress" style="height: 6px;" title="Token usage">
+                                @{
+                                    var pct = Math.Min(100, (agent.TokensUsed / 128_000.0) * 100);
+                                }
+                                <div class="progress-bar bg-@(pct > 80 ? "danger" : pct > 50 ? "warning" : "success")"
+                                     style="width: @pct%"></div>
+                            </div>
+
+                            <div class="mt-2 small text-muted">
+                                Flow: <code>@agent.FlowRunId.ToString()[..8]…</code>
+                                @if (agent.ParentAgentId.HasValue)
+                                {
+                                    <span class="ms-2">↑ Parent: <code>@agent.ParentAgentId.Value.ToString()[..8]…</code></span>
+                                }
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <small class="text-muted">Created: @agent.CreatedAt.ToString("HH:mm:ss")</small>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Agent> _agents = [];
+    private string _filterRunId = string.Empty;
+    private HubConnection? _hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/agents"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<object>("AgentUpdated", _ =>
+            InvokeAsync(async () => { await Refresh(); StateHasChanged(); }));
+
+        await _hubConnection.StartAsync();
+    }
+
+    private async Task Refresh()
+    {
+        var query = Db.Agents.AsQueryable();
+        if (Guid.TryParse(_filterRunId, out var runId))
+            query = query.Where(a => a.FlowRunId == runId);
+
+        _agents = await query
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(50)
+            .ToListAsync();
+    }
+
+    private static string GetStatusColor(AgentStatus status) => status switch
+    {
+        AgentStatus.Running => "primary",
+        AgentStatus.WaitingForHitl => "warning",
+        AgentStatus.Suspended => "secondary",
+        AgentStatus.Terminated => "dark",
+        AgentStatus.Idle => "info",
+        _ => "secondary"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
+}

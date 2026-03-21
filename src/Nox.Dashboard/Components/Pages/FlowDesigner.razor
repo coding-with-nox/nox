@@ -1,0 +1,206 @@
+@page "/flows"
+@using Nox.Domain
+@using Nox.Domain.Flows
+@using Nox.Infrastructure.Persistence
+@using Microsoft.EntityFrameworkCore
+@inject NoxDbContext Db
+@inject IFlowEngine FlowEngine
+@inject NavigationManager Navigation
+
+<PageTitle>Flow Designer — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>🔀 Flow Designer</h2>
+        <button class="btn btn-primary" @onclick="() => _showCreateModal = true">+ New Flow</button>
+    </div>
+
+    @if (_flows.Count == 0)
+    {
+        <div class="alert alert-secondary">No flows yet. Create your first flow to get started.</div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var flow in _flows)
+            {
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between">
+                            <strong>@flow.Name</strong>
+                            <span class="badge bg-@GetFlowStatusColor(flow.Status)">@flow.Status</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small">@flow.Description</p>
+                            <div class="small">
+                                <span class="me-3">🗂 @flow.Graph.Nodes.Count nodes</span>
+                                <span>🔗 @flow.Graph.Edges.Count edges</span>
+                            </div>
+                            <div class="small text-muted mt-1">v@flow.Version · Updated @flow.UpdatedAt.ToString("dd/MM HH:mm")</div>
+                        </div>
+                        <div class="card-footer d-flex gap-2">
+                            <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewFlow(flow)">View</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => StartFlow(flow.Id)">▶ Run</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_selectedFlow is not null)
+    {
+        <div class="mt-4">
+            <h4>Flow: @_selectedFlow.Name</h4>
+            <div class="card">
+                <div class="card-body" style="overflow-x: auto;">
+                    <!-- Simple text-based graph visualization -->
+                    <table class="table table-sm">
+                        <thead><tr><th>Node</th><th>Type</th><th>Outgoing Edges</th></tr></thead>
+                        <tbody>
+                            @foreach (var node in _selectedFlow.Graph.Nodes)
+                            {
+                                <tr>
+                                    <td><code>@node.Id</code> — @node.Label</td>
+                                    <td><span class="badge bg-secondary">@node.NodeType</span></td>
+                                    <td>
+                                        @foreach (var edge in _selectedFlow.Graph.GetOutgoingEdges(node.Id))
+                                        {
+                                            <span class="badge bg-light text-dark me-1">
+                                                → @edge.ToNodeId
+                                                @if (edge.Condition is not null)
+                                                {
+                                                    <span class="text-muted"> [@edge.Condition]</span>
+                                                }
+                                            </span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_runs.Count > 0)
+    {
+        <h4 class="mt-4">Recent Runs</h4>
+        <table class="table table-sm">
+            <thead><tr><th>Run ID</th><th>Flow</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
+            <tbody>
+                @foreach (var run in _runs.Take(20))
+                {
+                    <tr>
+                        <td><code>@run.Id.ToString()[..8]…</code></td>
+                        <td>@(_flows.FirstOrDefault(f => f.Id == run.FlowId)?.Name ?? run.FlowId.ToString())</td>
+                        <td><span class="badge bg-@GetRunStatusColor(run.Status)">@run.Status</span></td>
+                        <td>@run.StartedAt.ToString("dd/MM HH:mm")</td>
+                        <td>@(run.CompletedAt?.ToString("HH:mm:ss") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@if (_showCreateModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Flow</h5>
+                    <button class="btn-close" @onclick="() => _showCreateModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="_newFlowName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="2" @bind="_newFlowDesc"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _showCreateModal = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="CreateFlow">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private List<Flow> _flows = [];
+    private List<FlowRun> _runs = [];
+    private Flow? _selectedFlow;
+    private bool _showCreateModal;
+    private string _newFlowName = string.Empty;
+    private string _newFlowDesc = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _flows = await Db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
+        _runs = await Db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(50).ToListAsync();
+    }
+
+    private void ViewFlow(Flow flow)
+    {
+        _selectedFlow = _selectedFlow?.Id == flow.Id ? null : flow;
+    }
+
+    private async Task StartFlow(Guid flowId)
+    {
+        await FlowEngine.StartAsync(flowId);
+        await LoadData();
+    }
+
+    private async Task CreateFlow()
+    {
+        if (string.IsNullOrWhiteSpace(_newFlowName)) return;
+
+        var flow = new Flow
+        {
+            Name = _newFlowName,
+            Description = _newFlowDesc,
+            ProjectId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            CreatedBy = "HITL User"
+        };
+        Db.Flows.Add(flow);
+        await Db.SaveChangesAsync();
+
+        _showCreateModal = false;
+        _newFlowName = string.Empty;
+        _newFlowDesc = string.Empty;
+        await LoadData();
+    }
+
+    private static string GetFlowStatusColor(FlowStatus s) => s switch
+    {
+        FlowStatus.Active => "success",
+        FlowStatus.Draft => "secondary",
+        FlowStatus.Paused => "warning",
+        FlowStatus.Completed => "info",
+        FlowStatus.Failed => "danger",
+        _ => "secondary"
+    };
+
+    private static string GetRunStatusColor(FlowRunStatus s) => s switch
+    {
+        FlowRunStatus.Running => "primary",
+        FlowRunStatus.Paused => "warning",
+        FlowRunStatus.Completed => "success",
+        FlowRunStatus.Failed => "danger",
+        FlowRunStatus.Cancelled => "secondary",
+        _ => "secondary"
+    };
+}
