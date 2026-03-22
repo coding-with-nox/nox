@@ -20,10 +20,10 @@ public class McpServerInfo
 
 public class McpTool
 {
-    public required string ServerId { get; init; }
+    public string? ServerId { get; init; }
     public required string Name { get; init; }
     public string? Description { get; init; }
-    public JsonObject InputSchema { get; init; } = new();
+    public string? InputSchema { get; init; }
 }
 
 public class McpToolRef
@@ -50,4 +50,5 @@ public interface IMcpClientManager
     Task<JsonElement> InvokeToolAsync(string serverId, string toolName, JsonObject args, CancellationToken ct = default);
     Task RequestNewServerAsync(Guid agentId, McpServerProposal proposal, CancellationToken ct = default);
     Task<List<McpServerInfo>> GetAvailableServersAsync(CancellationToken ct = default);
+    Task<McpServerInfo> ApproveServerAsync(string serverId, string approvedBy, CancellationToken ct = default);
 }

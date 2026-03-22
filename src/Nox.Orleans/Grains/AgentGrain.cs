@@ -6,6 +6,7 @@ using Nox.Domain.Agents;
 using Nox.Domain.Hitl;
 using Nox.Domain.Llm;
 using Nox.Domain.Memory;
+using Nox.Domain.Mcp;
 using Nox.Domain.Messages;
 using Nox.Domain.Skills;
 using Nox.Orleans.GrainInterfaces;
@@ -23,6 +24,7 @@ public class AgentGrain(
     IMemoryStore memoryStore,
     ISkillRegistry skillRegistry,
     IHitlQueue hitlQueue,
+    IMcpClientManager mcpClientManager,
     ILogger<AgentGrain> logger)
     : Grain, IAgentGrain
 {
@@ -320,24 +322,15 @@ public class AgentGrain(
 
         try
         {
-            // Slash command handling
-            if (toolCall.Name.StartsWith('/') || toolCall.Name == "slash_command")
-            {
-                var slug = toolCall.Name.TrimStart('/');
-                var skill = await skillRegistry.ResolveAsync(slug, state.State.Id, ct: ct);
-                if (skill is not null)
-                {
-                    return $"Executed skill '{skill.Name}': {skill.Definition.ToJsonString()}";
-                }
-                return $"Skill '{slug}' not found.";
-            }
-
-            // HITL request
+            // Built-in: request_human_review
             if (toolCall.Name == "request_human_review")
             {
                 _hitlTcs = new TaskCompletionSource<HitlDecision>();
                 state.State.Status = AgentStatus.WaitingForHitl;
                 await state.WriteStateAsync();
+
+                var reason = toolCall.Arguments?.TryGetValue("reason", out var r) == true
+                    ? r?.ToString() : "Agent requested review";
 
                 var checkpointId = await hitlQueue.EnqueueAsync(new HitlCheckpoint
                 {
@@ -345,18 +338,70 @@ public class AgentGrain(
                     FlowNodeId = input.FlowNodeId,
                     Type = CheckpointType.Review,
                     Title = $"Agent {state.State.Role} requests review",
+                    Description = reason,
                     Context = new JsonObject
                     {
                         ["agentId"] = state.State.Id.ToString(),
-                        ["toolArgs"] = JsonSerializer.Serialize(toolCall.Arguments)
+                        ["nodeId"] = input.FlowNodeId
                     }
                 }, ct);
 
                 var decision = await _hitlTcs.Task.WaitAsync(ct);
+                state.State.Status = AgentStatus.Running;
+                await state.WriteStateAsync();
                 return $"Human decision: {decision.Decision}";
             }
 
-            return $"Tool '{toolCall.Name}' result: stub response";
+            // Built-in: spawn_subagent
+            if (toolCall.Name == "spawn_subagent")
+            {
+                var templateIdStr = toolCall.Arguments?.TryGetValue("templateId", out var t) == true
+                    ? t?.ToString() : null;
+                var subtask = toolCall.Arguments?.TryGetValue("subtask", out var s) == true
+                    ? s?.ToString() : "Subtask";
+
+                if (templateIdStr is not null && Guid.TryParse(templateIdStr, out var templateId))
+                {
+                    var subAgent = await SpawnSubAgentAsync(templateId);
+                    var subInfo = await subAgent.GetInfoAsync();
+                    return $"Sub-agent spawned: id={subInfo.Id}, role={subInfo.Role}, subtask={subtask}";
+                }
+                return "spawn_subagent: invalid templateId provided";
+            }
+
+            // Skill-based slash commands (slug stored with _ instead of -)
+            var normalizedName = toolCall.Name.Replace('_', '-').TrimStart('-');
+            var skill = await skillRegistry.ResolveAsync(normalizedName, state.State.Id, ct: ct);
+            if (skill is not null)
+            {
+                var skillArgs = toolCall.Arguments?.TryGetValue("args", out var a) == true
+                    ? a?.ToString() : string.Empty;
+                return $"/{skill.Slug} → {skill.Description}: {skill.Definition.ToJsonString()}";
+            }
+
+            // Try MCP tool: format mcp__{serverId}__{toolName}
+            if (toolCall.Name.StartsWith("mcp__"))
+            {
+                var parts = toolCall.Name.Split("__", 3);
+                if (parts.Length == 3)
+                {
+                    var serverId = parts[1];
+                    var mcpToolName = parts[2].Replace('_', '-');
+                    var args = new JsonObject();
+                    if (toolCall.Arguments is not null)
+                    {
+                        foreach (var kv in toolCall.Arguments)
+                            args[kv.Key] = kv.Value is not null
+                                ? JsonNode.Parse(JsonSerializer.Serialize(kv.Value))
+                                : null;
+                    }
+                    var mcpResult = await mcpClientManager.InvokeToolAsync(serverId, mcpToolName, args, ct);
+                    return mcpResult.GetRawText();
+                }
+            }
+
+            logger.LogWarning("Agent {Id}: unknown tool '{Tool}'", state.State.Id, toolCall.Name);
+            return $"Tool '{toolCall.Name}' not found.";
         }
         catch (Exception ex)
         {

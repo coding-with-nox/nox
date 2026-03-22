@@ -44,6 +44,12 @@ public static class DependencyInjection
         // Memory cache for skill registry
         services.AddMemoryCache();
 
+        // HTTP client for MCP servers
+        services.AddHttpClient("McpClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
         // Domain services
         services.AddScoped<IHitlQueue, PostgresHitlQueue>();
         services.AddScoped<ISkillRegistry, PostgresSkillRegistry>();

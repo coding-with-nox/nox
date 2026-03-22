@@ -3,6 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Nox.Domain.Flows;
+using Nox.Domain.Mcp;
+using Nox.Domain.Skills;
+using Nox.Infrastructure;
 using Nox.Infrastructure.Persistence;
 using Nox.Orleans.Grains;
 using Orleans.Configuration;
@@ -49,6 +52,8 @@ public static class NoxSiloConfigurator
                 {
                     services.AddScoped<IAgentTemplateResolver, DbAgentTemplateResolver>();
                     services.AddScoped<IFlowResolver, DbFlowResolver>();
+                    // Full infrastructure needed by AgentGrain
+                    services.AddNoxInfrastructure(configuration);
                 });
         });
 
