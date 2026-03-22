@@ -50,6 +50,7 @@ try
             o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
     builder.Services.AddSignalR();
+    builder.Services.AddHostedService<RedisSignalRBridge>();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
         c.SwaggerDoc("v1", new() { Title = "Nox Orchestration API", Version = "v1" }));

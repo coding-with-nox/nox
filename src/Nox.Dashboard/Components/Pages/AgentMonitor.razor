@@ -6,6 +6,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject NavigationManager Navigation
 @inject NoxDbContext Db
+@inject IConfiguration Configuration
 @implements IAsyncDisposable
 
 <PageTitle>Agent Monitor — Nox</PageTitle>
@@ -90,8 +91,9 @@
     {
         await Refresh();
 
+        var apiBase = Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000";
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/hubs/agents"))
+            .WithUrl($"{apiBase.TrimEnd('/')}/hubs/agents")
             .WithAutomaticReconnect()
             .Build();
 

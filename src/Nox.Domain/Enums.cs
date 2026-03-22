@@ -44,4 +44,4 @@ public enum MemoryContentType { Code, Design, Decision, Error, Summary, Requirem
 
 public enum McpTransport { Stdio, Sse, Http }
 
-public enum McpServerStatus { Active, Inactive, PendingApproval }
+public enum McpServerStatus { Active, Inactive, PendingApproval, Rejected }

@@ -4,6 +4,7 @@
 @using Nox.Domain.Hitl
 @inject NavigationManager Navigation
 @inject IHitlQueue HitlQueue
+@inject IConfiguration Configuration
 @implements IAsyncDisposable
 
 <PageTitle>HITL Review Queue — Nox</PageTitle>
@@ -101,8 +102,9 @@
     {
         _checkpoints = await HitlQueue.GetAllPendingAsync();
 
+        var apiBase = Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000";
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/hubs/hitl"))
+            .WithUrl($"{apiBase.TrimEnd('/')}/hubs/hitl")
             .WithAutomaticReconnect()
             .Build();
 

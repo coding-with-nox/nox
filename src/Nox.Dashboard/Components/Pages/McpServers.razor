@@ -1,0 +1,183 @@
+@page "/mcp"
+@using Microsoft.EntityFrameworkCore
+@using Nox.Domain.Mcp
+@using Nox.Infrastructure.Persistence
+@inject NoxDbContext Db
+@inject IMcpClientManager McpManager
+
+<PageTitle>MCP Servers — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>🔌 MCP Servers</h2>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Refresh">↺ Refresh</button>
+    </div>
+
+    <!-- Status filter -->
+    <div class="mb-3 d-flex gap-2 flex-wrap">
+        @foreach (var status in Enum.GetValues<McpServerStatus>())
+        {
+            <button class="btn btn-sm @(_statusFilter == status ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => { _statusFilter = status; }">
+                @status (@_servers.Count(s => s.Status == status))
+            </button>
+        }
+        <button class="btn btn-sm @(_statusFilter == null ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => { _statusFilter = null; }">
+            All (@_servers.Count)
+        </button>
+    </div>
+
+    @if (_filteredServers.Count == 0)
+    {
+        <div class="alert alert-secondary">No MCP servers found.</div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var srv in _filteredServers)
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="card border-@GetStatusColor(srv.Status)">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge bg-@GetStatusColor(srv.Status) me-2">@srv.Status</span>
+                                <strong>@srv.Name</strong>
+                                <span class="badge bg-secondary ms-1">@srv.Transport</span>
+                            </div>
+                            <small class="text-muted font-monospace">@srv.Id[..Math.Min(12, srv.Id.Length)]</small>
+                        </div>
+                        <div class="card-body">
+                            @if (srv.Description is not null)
+                            {
+                                <p class="text-muted small mb-2">@srv.Description</p>
+                            }
+                            @if (srv.EndpointUrl is not null)
+                            {
+                                <div class="small"><strong>Endpoint:</strong> <code>@srv.EndpointUrl</code></div>
+                            }
+                            @if (srv.DockerImage is not null)
+                            {
+                                <div class="small"><strong>Image:</strong> <code>@srv.DockerImage</code></div>
+                            }
+                            @if (srv.ProposedByAgentId.HasValue)
+                            {
+                                <div class="small text-muted mt-1">Proposed by agent: <code>@srv.ProposedByAgentId.Value.ToString()[..8]</code></div>
+                            }
+                            @if (srv.ApprovedBy is not null)
+                            {
+                                <div class="small text-muted">Approved by: @srv.ApprovedBy</div>
+                            }
+
+                            @if (_toolsCache.TryGetValue(srv.Id, out var tools) && tools.Count > 0)
+                            {
+                                <div class="mt-2">
+                                    <small class="text-muted">Tools (@tools.Count):</small>
+                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                        @foreach (var t in tools)
+                                        {
+                                            <span class="badge bg-light text-dark border">@t.Name</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div class="card-footer d-flex gap-2">
+                            @if (srv.Status == McpServerStatus.PendingApproval)
+                            {
+                                <button class="btn btn-success btn-sm" @onclick="() => Approve(srv.Id)">
+                                    ✓ Approve
+                                </button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => Reject(srv.Id)">
+                                    ✗ Reject
+                                </button>
+                            }
+                            @if (srv.Status == McpServerStatus.Active && srv.EndpointUrl is not null)
+                            {
+                                <button class="btn btn-outline-info btn-sm" @onclick="() => DiscoverTools(srv.Id)">
+                                    🔍 Discover Tools
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMsg))
+    {
+        <div class="alert alert-danger mt-3">@_errorMsg</div>
+    }
+</div>
+
+@code {
+    private List<McpServerInfo> _servers = [];
+    private Dictionary<string, List<McpTool>> _toolsCache = new();
+    private McpServerStatus? _statusFilter;
+    private string _errorMsg = string.Empty;
+
+    private List<McpServerInfo> _filteredServers =>
+        _statusFilter.HasValue
+            ? _servers.Where(s => s.Status == _statusFilter).ToList()
+            : _servers;
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh()
+    {
+        _errorMsg = string.Empty;
+        _servers = await Db.McpServers.OrderByDescending(s => s.Status).ToListAsync();
+    }
+
+    private async Task Approve(string serverId)
+    {
+        try
+        {
+            await McpManager.ApproveServerAsync(serverId, "HITL User");
+            await Refresh();
+        }
+        catch (Exception ex)
+        {
+            _errorMsg = ex.Message;
+        }
+    }
+
+    private async Task Reject(string serverId)
+    {
+        try
+        {
+            var server = await Db.McpServers.FindAsync(serverId);
+            if (server is null) return;
+            server.Status = McpServerStatus.Rejected;
+            await Db.SaveChangesAsync();
+            await Refresh();
+        }
+        catch (Exception ex)
+        {
+            _errorMsg = ex.Message;
+        }
+    }
+
+    private async Task DiscoverTools(string serverId)
+    {
+        try
+        {
+            var tools = await McpManager.DiscoverToolsAsync(serverId);
+            _toolsCache[serverId] = tools;
+        }
+        catch (Exception ex)
+        {
+            _errorMsg = $"Tool discovery failed: {ex.Message}";
+        }
+    }
+
+    private static string GetStatusColor(McpServerStatus status) => status switch
+    {
+        McpServerStatus.Active => "success",
+        McpServerStatus.PendingApproval => "warning",
+        McpServerStatus.Inactive => "secondary",
+        McpServerStatus.Rejected => "danger",
+        _ => "secondary"
+    };
+}
