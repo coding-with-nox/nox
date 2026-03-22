@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Nox.Api.Auth;
 using Nox.Api.Hubs;
 using Nox.Api.Middleware;
 using Nox.Domain.Agents;
@@ -9,6 +12,7 @@ using Nox.Infrastructure.Persistence;
 using Nox.Orleans;
 using Nox.Orleans.GrainInterfaces;
 using Nox.Orleans.Grains;
+using Nox.Api.Logging;
 using Serilog;
 using Serilog.Events;
 
@@ -16,6 +20,7 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Orleans", LogEventLevel.Warning)
+    .Destructure.With<PiiScrubberPolicy>()   // GDPR: mask emails in log messages
     .WriteTo.Console()
     .WriteTo.Seq(Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://localhost:5341")
     .CreateLogger();
@@ -44,7 +49,35 @@ try
     builder.Services.AddScoped<Nox.McpServer.Tools.IFlowRepository, EfFlowRepository>();
     builder.Services.AddScoped<Nox.McpServer.Tools.IAgentTemplateRepository, EfAgentTemplateRepository>();
 
-    // API
+    // ── Authentication — Keycloak JWT Bearer ────────────────────────────────
+    var authConfig = builder.Configuration.GetSection("Nox:Auth");
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = authConfig["Authority"] ?? "http://localhost:8080/realms/nox";
+            options.Audience  = authConfig["Audience"]  ?? "nox-api";
+            options.RequireHttpsMetadata = bool.Parse(authConfig["RequireHttpsMetadata"] ?? "false");
+            options.TokenValidationParameters.ValidateAudience = true;
+        });
+
+    // Extract Keycloak realm_access.roles → ClaimTypes.Role
+    builder.Services.AddSingleton<IClaimsTransformation, KeycloakRolesTransformer>();
+
+    // ── Authorization — RBAC policies ────────────────────────────────────────
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy(NoxPolicies.AnyUser, p =>
+            p.RequireRole(NoxPolicies.RoleViewer, NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
+
+        options.AddPolicy(NoxPolicies.ManagerOrAdmin, p =>
+            p.RequireRole(NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
+
+        options.AddPolicy(NoxPolicies.AdminOnly, p =>
+            p.RequireRole(NoxPolicies.RoleAdmin));
+    });
+
+    // ── API ───────────────────────────────────────────────────────────────────
     builder.Services.AddControllers()
         .AddJsonOptions(o =>
             o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
@@ -55,8 +88,15 @@ try
     builder.Services.AddSwaggerGen(c =>
         c.SwaggerDoc("v1", new() { Title = "Nox Orchestration API", Version = "v1" }));
 
+    // CORS — restrict to configured origins (not AllowAnyOrigin)
+    var allowedOrigins = builder.Configuration
+        .GetSection("Nox:Cors:AllowedOrigins").Get<string[]>()
+        ?? ["http://localhost:5050"];
     builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-        p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+        p.WithOrigins(allowedOrigins)
+         .AllowAnyMethod()
+         .AllowAnyHeader()
+         .AllowCredentials()));
 
     var app = builder.Build();
 
@@ -75,6 +115,9 @@ try
         app.UseSwagger();
         app.UseSwaggerUI();
     }
+
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     app.UseMiddleware<AcpRoutingMiddleware>();
 

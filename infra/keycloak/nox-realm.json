@@ -1,0 +1,86 @@
+{
+  "realm": "nox",
+  "displayName": "Nox Orchestration",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "nox-admin",   "description": "Full administrative access" },
+      { "name": "nox-manager", "description": "Approve HITL checkpoints, manage flows and skills" },
+      { "name": "nox-viewer",  "description": "Read-only access to all resources" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "nox-api",
+      "name": "Nox API",
+      "description": "Backend REST + SignalR API",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "nox-api-secret-change-me-in-production",
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "nox-dashboard",
+      "name": "Nox Dashboard",
+      "description": "Blazor Server dashboard (public client)",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5050/*",
+        "https://localhost:5051/*"
+      ],
+      "webOrigins": ["+"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    }
+  ],
+  "users": [
+    {
+      "username": "nox-admin",
+      "email": "admin@nox.local",
+      "firstName": "Nox",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Admin123!", "temporary": true }
+      ],
+      "realmRoles": ["nox-admin"]
+    },
+    {
+      "username": "nox-manager",
+      "email": "manager@nox.local",
+      "firstName": "Nox",
+      "lastName": "Manager",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Manager123!", "temporary": true }
+      ],
+      "realmRoles": ["nox-manager"]
+    },
+    {
+      "username": "nox-viewer",
+      "email": "viewer@nox.local",
+      "firstName": "Nox",
+      "lastName": "Viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Viewer123!", "temporary": true }
+      ],
+      "realmRoles": ["nox-viewer"]
+    }
+  ]
+}

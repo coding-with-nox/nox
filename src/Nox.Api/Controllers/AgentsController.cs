@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nox.Api.Auth;
 using Nox.Domain.Agents;
 using Nox.Domain.Skills;
 using Nox.Infrastructure.Persistence;
@@ -10,19 +12,15 @@ namespace Nox.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = NoxPolicies.AnyUser)]
 public class AgentsController(
     NoxDbContext db,
     ISkillRegistry skillRegistry,
     IClusterClient orleans) : ControllerBase
 {
-    // --- Templates ---
-
     [HttpGet("templates")]
     public async Task<IActionResult> ListTemplates()
-    {
-        var templates = await db.AgentTemplates.ToListAsync();
-        return Ok(templates);
-    }
+        => Ok(await db.AgentTemplates.ToListAsync());
 
     [HttpGet("templates/{id:guid}")]
     public async Task<IActionResult> GetTemplate(Guid id)
@@ -32,6 +30,7 @@ public class AgentsController(
     }
 
     [HttpPost("templates")]
+    [Authorize(Policy = NoxPolicies.AdminOnly)]
     public async Task<IActionResult> CreateTemplate([FromBody] AgentTemplate template)
     {
         db.AgentTemplates.Add(template);
@@ -40,6 +39,7 @@ public class AgentsController(
     }
 
     [HttpPut("templates/{id:guid}")]
+    [Authorize(Policy = NoxPolicies.AdminOnly)]
     public async Task<IActionResult> UpdateTemplate(Guid id, [FromBody] AgentTemplate updated)
     {
         var template = await db.AgentTemplates.FindAsync(id);
@@ -60,33 +60,23 @@ public class AgentsController(
         return Ok(template);
     }
 
-    // --- Running agents ---
-
     [HttpGet("runs/{runId:guid}")]
     public async Task<IActionResult> GetAgentsByRun(Guid runId)
-    {
-        var agents = await db.Agents
-            .Where(a => a.FlowRunId == runId)
-            .ToListAsync();
-        return Ok(agents);
-    }
+        => Ok(await db.Agents.Where(a => a.FlowRunId == runId).ToListAsync());
 
     [HttpGet("{id:guid}/info")]
     public async Task<IActionResult> GetAgentInfo(Guid id)
     {
         var grain = orleans.GetGrain<IAgentGrain>(id);
-        var info = await grain.GetInfoAsync();
-        return Ok(info);
+        return Ok(await grain.GetInfoAsync());
     }
 
     [HttpGet("{id:guid}/skills")]
     public async Task<IActionResult> GetAgentSkills(Guid id)
-    {
-        var skills = await skillRegistry.GetEffectiveSkillsAsync(id);
-        return Ok(skills);
-    }
+        => Ok(await skillRegistry.GetEffectiveSkillsAsync(id));
 
     [HttpPost("{id:guid}/terminate")]
+    [Authorize(Policy = NoxPolicies.AdminOnly)]
     public async Task<IActionResult> Terminate(Guid id)
     {
         var grain = orleans.GetGrain<IAgentGrain>(id);

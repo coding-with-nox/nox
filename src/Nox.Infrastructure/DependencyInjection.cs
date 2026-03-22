@@ -6,6 +6,8 @@ using Nox.Domain.Llm;
 using Nox.Domain.Memory;
 using Nox.Domain.Mcp;
 using Nox.Domain.Skills;
+using Nox.Domain.Gdpr;
+using Nox.Infrastructure.Gdpr;
 using Nox.Infrastructure.Hitl;
 using Nox.Infrastructure.Llm;
 using Nox.Infrastructure.Memory;
@@ -24,21 +26,24 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         // PostgreSQL / EF Core
-        services.AddDbContext<NoxDbContext>(options =>
-            options.UseNpgsql(configuration["Nox:Database:ConnectionString"]
-                ?? "Host=localhost;Port=5432;Database=nox;Username=nox;Password=nox_secret"));
+        var dbConnStr = configuration["Nox:Database:ConnectionString"]
+            ?? throw new InvalidOperationException("Nox:Database:ConnectionString is not configured. Set it via appsettings.Development.json or environment variable.");
+        services.AddDbContext<NoxDbContext>(options => options.UseNpgsql(dbConnStr));
 
         // Redis
-        services.AddSingleton<IConnectionMultiplexer>(_ =>
-            ConnectionMultiplexer.Connect(
-                configuration["Nox:Redis:ConnectionString"] ?? "localhost:6379"));
+        var redisConnStr = configuration["Nox:Redis:ConnectionString"]
+            ?? throw new InvalidOperationException("Nox:Redis:ConnectionString is not configured.");
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnStr));
 
         // Qdrant
         services.AddSingleton(_ =>
         {
             var host = configuration["Nox:Qdrant:Host"] ?? "localhost";
             var port = int.Parse(configuration["Nox:Qdrant:Port"] ?? "6334");
-            return new QdrantClient(host, port);
+            var apiKey = configuration["Nox:Qdrant:ApiKey"];
+            return apiKey is not null
+                ? new QdrantClient(host, port, apiKey: apiKey)
+                : new QdrantClient(host, port);
         });
 
         // Memory cache for skill registry
@@ -56,6 +61,9 @@ public static class DependencyInjection
         services.AddScoped<IMemoryStore, QdrantMemoryStore>();
         services.AddSingleton<ILlmProvider, NoxLlmProvider>();
         services.AddScoped<IMcpClientManager, NoxMcpClientManager>();
+
+        // GDPR
+        services.AddScoped<IGdprService, GdprService>();
 
         return services;
     }

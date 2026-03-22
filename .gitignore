@@ -52,3 +52,14 @@ desktop.ini
 
 # Claude Code session memory (project-local)
 .claude/projects/
+
+# Environment secrets (never commit)
+infra/.env
+.env
+
+# Generated dev certs
+infra/certs/*.crt
+infra/certs/*.key
+infra/certs/*.pem
+infra/certs/*.srl
+infra/certs/*.csr

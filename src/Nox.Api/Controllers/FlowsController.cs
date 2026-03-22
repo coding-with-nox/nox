@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nox.Api.Auth;
 using Nox.Domain.Flows;
 using Nox.Infrastructure.Persistence;
 using Nox.Orleans.GrainInterfaces;
@@ -10,6 +12,7 @@ namespace Nox.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = NoxPolicies.AnyUser)]
 public class FlowsController(
     NoxDbContext db,
     IFlowEngine flowEngine,
@@ -20,8 +23,7 @@ public class FlowsController(
     {
         var query = db.Flows.AsQueryable();
         if (projectId.HasValue) query = query.Where(f => f.ProjectId == projectId.Value);
-        var flows = await query.OrderByDescending(f => f.UpdatedAt).ToListAsync();
-        return Ok(flows);
+        return Ok(await query.OrderByDescending(f => f.UpdatedAt).ToListAsync());
     }
 
     [HttpGet("{id:guid}")]
@@ -32,6 +34,7 @@ public class FlowsController(
     }
 
     [HttpPost]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> Create([FromBody] CreateFlowRequest req)
     {
         var flow = new Flow
@@ -40,7 +43,7 @@ public class FlowsController(
             Description = req.Description,
             ProjectId = req.ProjectId,
             Graph = req.Graph ?? new FlowGraph(),
-            CreatedBy = req.CreatedBy ?? "system"
+            CreatedBy = User.Identity?.Name ?? User.FindFirst("preferred_username")?.Value ?? "unknown"
         };
         db.Flows.Add(flow);
         await db.SaveChangesAsync();
@@ -48,6 +51,7 @@ public class FlowsController(
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateFlowRequest req)
     {
         var flow = await db.Flows.FindAsync(id);
@@ -62,8 +66,6 @@ public class FlowsController(
         return Ok(flow);
     }
 
-    // --- Flow Runs ---
-
     [HttpGet("{id:guid}/runs")]
     public async Task<IActionResult> ListRuns(Guid id)
     {
@@ -74,6 +76,7 @@ public class FlowsController(
     }
 
     [HttpPost("{id:guid}/runs")]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> StartRun(Guid id, [FromBody] StartFlowRunRequest req)
     {
         var flow = await db.Flows.FindAsync(id);
@@ -92,6 +95,7 @@ public class FlowsController(
     }
 
     [HttpPost("runs/{runId:guid}/cancel")]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> CancelRun(Guid runId, [FromBody] CancelRunRequest req)
     {
         var grain = orleans.GetGrain<IFlowGrain>(runId);

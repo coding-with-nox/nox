@@ -1,42 +1,49 @@
 version: '3.9'
 
+# Load .env file — copy .env.example to .env and fill values before running
+# docker compose --env-file infra/.env up
+
 services:
+
+  # ── PostgreSQL (main application DB) ────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: nox-postgres
     environment:
-      POSTGRES_USER: nox
-      POSTGRES_PASSWORD: nox_secret
-      POSTGRES_DB: nox
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nox -d nox"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── PostgreSQL (Orleans cluster store) ──────────────────────────────────────
   postgres-orleans:
     image: postgres:16-alpine
     container_name: nox-postgres-orleans
     environment:
-      POSTGRES_USER: nox
-      POSTGRES_PASSWORD: nox_secret
-      POSTGRES_DB: nox_orleans
+      POSTGRES_USER: ${POSTGRES_ORLEANS_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ORLEANS_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_ORLEANS_DB}
     ports:
       - "5433:5432"
     volumes:
       - postgres_orleans_data:/var/lib/postgresql/data
       - ./postgres/orleans-init.sql:/docker-entrypoint-initdb.d/orleans-init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nox -d nox_orleans"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ORLEANS_USER} -d ${POSTGRES_ORLEANS_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Redis (pub/sub + Orleans reminders) ─────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: nox-redis
@@ -44,29 +51,33 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    # Password via env var — connection string must include ,password=...
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Qdrant (vector DB for agent memory) ─────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:latest
     container_name: nox-qdrant
     ports:
-      - "6333:6333"   # HTTP
+      - "6333:6333"   # HTTP REST
       - "6334:6334"   # gRPC
     volumes:
       - qdrant_data:/qdrant/storage
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Seq (structured log aggregator) ─────────────────────────────────────────
   seq:
     image: datalust/seq:latest
     container_name: nox-seq
@@ -74,9 +85,28 @@ services:
       ACCEPT_EULA: Y
     ports:
       - "5341:5341"   # ingestion
-      - "8081:80"     # UI (mapped to avoid conflict with app)
+      - "8081:80"     # UI → http://localhost:8081
     volumes:
       - seq_data:/data
+
+  # ── Keycloak (identity provider — OAuth2 / OIDC) ────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26
+    container_name: nox-keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:

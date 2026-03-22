@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nox.Api.Auth;
 using Nox.Domain;
 using Nox.Domain.Mcp;
 using Nox.Infrastructure.Persistence;
@@ -8,6 +10,7 @@ namespace Nox.Api.Controllers;
 
 [ApiController]
 [Route("api/mcp")]
+[Authorize(Policy = NoxPolicies.AnyUser)]
 public class McpController(
     NoxDbContext db,
     IMcpClientManager mcpManager) : ControllerBase

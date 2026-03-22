@@ -17,8 +17,9 @@ public static class NoxSiloConfigurator
     public static IHostBuilder AddNoxOrleans(this IHostBuilder builder, IConfiguration configuration)
     {
         var orleansConnectionString = configuration["Nox:Orleans:PostgresConnectionString"]
-            ?? "Host=localhost;Port=5433;Database=nox_orleans;Username=nox;Password=nox_secret";
-        var redisConnectionString = configuration["Nox:Redis:ConnectionString"] ?? "localhost:6379";
+            ?? throw new InvalidOperationException("Nox:Orleans:PostgresConnectionString is not configured.");
+        var redisConnectionString = configuration["Nox:Redis:ConnectionString"]
+            ?? throw new InvalidOperationException("Nox:Redis:ConnectionString is not configured.");
 
         builder.UseOrleans(siloBuilder =>
         {
