@@ -81,7 +81,7 @@ try
     app.MapControllers();
     app.MapHub<HitlHub>("/hubs/hitl");
     app.MapHub<AgentMonitorHub>("/hubs/agents");
-    // app.MapMcp("/mcp"); // requires ModelContextProtocol 1.x+
+    app.MapMcp("/mcp");
 
     app.MapGet("/health", () => new { status = "healthy", timestamp = DateTimeOffset.UtcNow });
 

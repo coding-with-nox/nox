@@ -12,9 +12,10 @@ using System.Text.Json.Nodes;
 
 namespace Nox.Infrastructure.Llm;
 
-// Disambiguate Anthropic TextContent vs M.Extensions.AI TextContent
+// Disambiguate Anthropic types vs M.Extensions.AI types
 using AnthropicTextContent = Anthropic.SDK.Messaging.TextContent;
 using AiTextContent = Microsoft.Extensions.AI.TextContent;
+using AnthropicToolResultContent = Anthropic.SDK.Messaging.ToolResultContent;
 
 public class NoxLlmProvider : ILlmProvider
 {
@@ -99,7 +100,7 @@ internal sealed class AnthropicChatClientAdapter(MessagesEndpoint endpoint, stri
             {
                 // Tool results → User message with ToolResultContent blocks
                 var blocks = m.Contents.OfType<FunctionResultContent>()
-                    .Select(r => (ContentBase)new ToolResultContent
+                    .Select(r => (ContentBase)new AnthropicToolResultContent
                     {
                         ToolUseId = r.CallId ?? string.Empty,
                         Content = r.Result?.ToString() ?? string.Empty
