@@ -30,6 +30,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_orleans_data:/var/lib/postgresql/data
+      - ./postgres/orleans-init.sql:/docker-entrypoint-initdb.d/orleans-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nox -d nox_orleans"]
       interval: 10s

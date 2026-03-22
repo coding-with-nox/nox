@@ -16,6 +16,12 @@ builder.Services.AddRazorComponents()
 // Infrastructure (read-only access to DB for dashboard)
 builder.Services.AddNoxInfrastructure(builder.Configuration);
 
+// HTTP client for Nox.Api
+builder.Services.AddHttpClient("NoxApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000");
+});
+
 // Flow engine (HTTP client to Nox.Api)
 builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
 
