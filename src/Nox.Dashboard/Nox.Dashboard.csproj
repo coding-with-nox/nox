@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nox.Domain\Nox.Domain.csproj" />
-    <ProjectReference Include="..\Nox.Application\Nox.Application.csproj" />
     <ProjectReference Include="..\Nox.Infrastructure\Nox.Infrastructure.csproj" />
   </ItemGroup>
 

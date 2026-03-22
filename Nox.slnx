@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Nox.Api/Nox.Api.csproj" />
-    <Project Path="src/Nox.Application/Nox.Application.csproj" />
     <Project Path="src/Nox.Dashboard/Nox.Dashboard.csproj" />
     <Project Path="src/Nox.Domain/Nox.Domain.csproj" />
     <Project Path="src/Nox.Infrastructure/Nox.Infrastructure.csproj" />
