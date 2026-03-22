@@ -80,6 +80,9 @@ public class AgentGrain(
                 topK: 5,
                 filter: new MemoryFilter { AgentId = state.State.Id });
 
+            // Build tools from effective skills + built-in tools
+            var tools = await BuildToolsAsync(input, ct.CancellationToken);
+
             // Build system prompt with memory context
             var systemPrompt = BuildSystemPrompt(memoryChunks);
 
@@ -90,13 +93,20 @@ public class AgentGrain(
                 $"Task: {input.Payload.ToJsonString()}\nNode: {input.FlowNodeId}"));
 
             var chatClient = llmProvider.GetChatClient(state.State.Model);
+            var chatOptions = new ChatOptions
+            {
+                MaxOutputTokens = 4096,
+                Temperature = (float?)0.7f,
+                Tools = tools
+            };
+
             JsonObject? finalOutput = null;
             var totalTokens = 0;
             var maxIterations = 10;
 
             for (var i = 0; i < maxIterations; i++)
             {
-                var response = await chatClient.GetResponseAsync(_workingMemory, cancellationToken: ct.CancellationToken);
+                var response = await chatClient.GetResponseAsync(_workingMemory, chatOptions, ct.CancellationToken);
                 totalTokens += (int)(response.Usage?.TotalTokenCount ?? 0);
                 state.State.TokensUsed += (int)(response.Usage?.TotalTokenCount ?? 0);
 
@@ -111,12 +121,14 @@ public class AgentGrain(
                     break;
                 }
 
-                // Handle tool calls
+                // Handle tool calls — collect all results as FunctionResultContent
+                var resultContents = new List<AIContent>();
                 foreach (var toolCall in message.Contents.OfType<FunctionCallContent>())
                 {
                     var toolResult = await HandleToolCallAsync(toolCall, input, ct.CancellationToken);
-                    _workingMemory.Add(new ChatMessage(ChatRole.Tool, toolResult));
+                    resultContents.Add(new FunctionResultContent(toolCall.CallId!, toolResult));
                 }
+                _workingMemory.Add(new ChatMessage(ChatRole.Tool, resultContents));
 
                 // Check token budget
                 if (state.State.TokensUsed > 100_000)
@@ -253,6 +265,36 @@ public class AgentGrain(
         ParentAgentId = state.State.ParentAgentId
     });
 
+    private async Task<IList<AITool>> BuildToolsAsync(TaskInput input, CancellationToken ct)
+    {
+        var tools = new List<AITool>();
+
+        // Skill-based tools (from registry)
+        var skills = await skillRegistry.GetEffectiveSkillsAsync(state.State.Id);
+        foreach (var skill in skills.Where(s => s.Status == SkillStatus.Active))
+        {
+            var captured = skill;
+            tools.Add(AIFunctionFactory.Create(
+                (string args = "") => Task.FromResult($"Executed skill '{captured.Slug}': {captured.Definition.ToJsonString()}"),
+                name: captured.Slug.Replace('-', '_'),
+                description: captured.Description ?? captured.Name));
+        }
+
+        // Built-in: request_human_review
+        tools.Add(AIFunctionFactory.Create(
+            (string reason = "needs review") => Task.FromResult("HITL checkpoint enqueued"),
+            name: "request_human_review",
+            description: "Request a human to review and approve the current work before proceeding"));
+
+        // Built-in: spawn_subagent
+        tools.Add(AIFunctionFactory.Create(
+            (string templateId = "", string subtask = "") => Task.FromResult("Sub-agent spawned"),
+            name: "spawn_subagent",
+            description: "Spawn a sub-agent with a specific role to handle a parallel subtask"));
+
+        return tools;
+    }
+
     private string BuildSystemPrompt(List<MemoryChunk> memoryChunks)
     {
         var sb = new System.Text.StringBuilder();
@@ -268,11 +310,6 @@ public class AgentGrain(
                 sb.AppendLine();
             }
         }
-
-        sb.AppendLine("## Available Slash Commands");
-        sb.AppendLine("Use /docs to generate documentation.");
-        sb.AppendLine("Use /code-review to review code.");
-        sb.AppendLine("Use /propose-skill to propose a new skill.");
 
         return sb.ToString();
     }
