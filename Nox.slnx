@@ -10,6 +10,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nox.Api.Tests/Nox.Api.Tests.csproj" />
+    <Project Path="tests/Nox.Application.Tests/Nox.Application.Tests.csproj" />
     <Project Path="tests/Nox.Domain.Tests/Nox.Domain.Tests.csproj" />
     <Project Path="tests/Nox.Orleans.Tests/Nox.Orleans.Tests.csproj" />
   </Folder>
