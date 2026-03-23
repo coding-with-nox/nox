@@ -97,14 +97,19 @@ public static class FlowTools
     public static async Task<string> SubmitCheckpointDecision(
         [Description("Checkpoint ID (UUID)")] string checkpointId,
         [Description("Decision: Approved, Rejected, or Modified")] string decision,
-        [Description("Your name or identifier")] string decidedBy,
         [Description("Optional payload as JSON")] string? payloadJson,
-        IHitlQueue hitlQueue)
+        IHitlQueue hitlQueue,
+        Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor)
     {
         var id = Guid.Parse(checkpointId);
         var payload = payloadJson is not null
             ? JsonObject.Parse(payloadJson)?.AsObject()
             : null;
+
+        // decidedBy is taken from the authenticated JWT subject, not from caller input
+        var decidedBy = httpContextAccessor.HttpContext?.User.Identity?.Name
+            ?? httpContextAccessor.HttpContext?.User.FindFirst("sub")?.Value
+            ?? "mcp-agent";
 
         await hitlQueue.SubmitDecisionAsync(id, new HitlDecision
         {

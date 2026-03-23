@@ -4,6 +4,7 @@
 @using Nox.Infrastructure.Persistence
 @inject NoxDbContext Db
 @inject IMcpClientManager McpManager
+@inject IHttpContextAccessor HttpContextAccessor
 
 <PageTitle>MCP Servers — Nox</PageTitle>
 
@@ -114,6 +115,7 @@
 @code {
     private List<McpServerInfo> _servers = [];
     private Dictionary<string, List<McpTool>> _toolsCache = new();
+    private string CurrentUser => HttpContextAccessor.HttpContext?.User.Identity?.Name ?? "dashboard-operator";
     private McpServerStatus? _statusFilter;
     private string _errorMsg = string.Empty;
 
@@ -134,7 +136,7 @@
     {
         try
         {
-            await McpManager.ApproveServerAsync(serverId, "HITL User");
+            await McpManager.ApproveServerAsync(serverId, CurrentUser);
             await Refresh();
         }
         catch (Exception ex)

@@ -5,6 +5,7 @@
 @inject NavigationManager Navigation
 @inject IHitlQueue HitlQueue
 @inject IConfiguration Configuration
+@inject IHttpContextAccessor HttpContextAccessor
 @implements IAsyncDisposable
 
 <PageTitle>HITL Review Queue — Nox</PageTitle>
@@ -97,6 +98,7 @@
     private List<HitlCheckpoint> _recentDecisions = [];
     private HubConnection? _hubConnection;
     private bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
+    private string CurrentUser => HttpContextAccessor.HttpContext?.User.Identity?.Name ?? "dashboard-operator";
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,7 +137,7 @@
         {
             CheckpointId = checkpointId,
             Decision = decision,
-            DecidedBy = "HITL User"
+            DecidedBy = CurrentUser
         });
 
         var resolved = _checkpoints.FirstOrDefault(c => c.Id == checkpointId);

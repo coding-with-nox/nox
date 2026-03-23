@@ -5,6 +5,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject NoxDbContext Db
 @inject ISkillRegistry SkillRegistry
+@inject IHttpContextAccessor HttpContextAccessor
 
 <PageTitle>Skill Approval — Nox</PageTitle>
 
@@ -85,6 +86,7 @@
     private List<Skill> _skills = [];
     private List<Skill> _pendingSkills = [];
     private string _filter = string.Empty;
+    private string CurrentUser => HttpContextAccessor.HttpContext?.User.Identity?.Name ?? "dashboard-operator";
 
     private IEnumerable<Skill> FilteredActiveSkills => _skills
         .Where(s => s.Status == SkillStatus.Active)
@@ -105,13 +107,13 @@
 
     private async Task Approve(Guid id)
     {
-        await SkillRegistry.ApproveSkillAsync(id, "HITL User");
+        await SkillRegistry.ApproveSkillAsync(id, CurrentUser);
         await Reload();
     }
 
     private async Task Reject(Guid id)
     {
-        await SkillRegistry.RejectSkillAsync(id, "HITL User", "Rejected via dashboard");
+        await SkillRegistry.RejectSkillAsync(id, CurrentUser, "Rejected via dashboard");
         await Reload();
     }
 

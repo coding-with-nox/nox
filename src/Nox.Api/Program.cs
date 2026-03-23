@@ -30,6 +30,9 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
+    // Limit request body size (prevent DoS via large payloads)
+    builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 1 * 1024 * 1024); // 1 MB
+
     // Infrastructure (EF, Redis, Qdrant, LLM)
     builder.Services.AddNoxInfrastructure(builder.Configuration);
 
@@ -77,11 +80,26 @@ try
             p.RequireRole(NoxPolicies.RoleAdmin));
     });
 
+    // ── Rate limiting ─────────────────────────────────────────────────────────
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+            System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                ctx.User.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+                _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 300,
+                    Window = TimeSpan.FromMinutes(1)
+                }));
+        options.RejectionStatusCode = 429;
+    });
+
     // ── API ───────────────────────────────────────────────────────────────────
     builder.Services.AddControllers()
         .AddJsonOptions(o =>
             o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
+    builder.Services.AddHttpContextAccessor();
     builder.Services.AddSignalR();
     builder.Services.AddHostedService<RedisSignalRBridge>();
     builder.Services.AddEndpointsApiExplorer();
@@ -109,6 +127,7 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseCors();
+    app.UseRateLimiter();
 
     if (app.Environment.IsDevelopment())
     {
@@ -124,7 +143,7 @@ try
     app.MapControllers();
     app.MapHub<HitlHub>("/hubs/hitl");
     app.MapHub<AgentMonitorHub>("/hubs/agents");
-    app.MapMcp("/mcp");
+    app.MapMcp("/mcp").RequireAuthorization(NoxPolicies.AnyUser);
 
     app.MapGet("/health", () => new { status = "healthy", timestamp = DateTimeOffset.UtcNow });
 

@@ -83,8 +83,17 @@ public class PostgresHitlQueue(
 
     public async Task SubmitDecisionAsync(Guid checkpointId, HitlDecision decision)
     {
-        var checkpoint = await db.HitlCheckpoints.FindAsync(checkpointId)
-            ?? throw new KeyNotFoundException($"Checkpoint {checkpointId} not found");
+        // Atomic check: only update if still Pending — prevents double-decision race condition
+        var checkpoint = await db.HitlCheckpoints
+            .FirstOrDefaultAsync(h => h.Id == checkpointId && h.Status == CheckpointStatus.Pending);
+
+        if (checkpoint is null)
+        {
+            var exists = await db.HitlCheckpoints.AnyAsync(h => h.Id == checkpointId);
+            throw exists
+                ? new InvalidOperationException($"Checkpoint {checkpointId} has already been resolved")
+                : new KeyNotFoundException($"Checkpoint {checkpointId} not found");
+        }
 
         checkpoint.Status = decision.Decision switch
         {

@@ -24,6 +24,14 @@ public class AcpRoutingMiddleware(RequestDelegate next)
             return;
         }
 
+        // Require authenticated caller (grain-to-API or agent-to-API)
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsync("Unauthorized");
+            return;
+        }
+
         AcpMessage? message;
         try
         {
@@ -90,7 +98,7 @@ public class AcpRoutingMiddleware(RequestDelegate next)
         {
             logger.LogError(ex, "ACP routing error for topic {Topic}", message.Topic);
             ctx.Response.StatusCode = 500;
-            await ctx.Response.WriteAsync(ex.Message);
+            await ctx.Response.WriteAsync("Internal error processing ACP message");
         }
     }
 
@@ -133,7 +141,7 @@ public class AcpRoutingMiddleware(RequestDelegate next)
         var memoryStore = sp.GetRequiredService<IMemoryStore>();
         var query = message.Payload["query"]?.GetValue<string>() ?? "";
         var projectId = Guid.Parse(message.Payload["projectId"]?.GetValue<string>() ?? Guid.Empty.ToString());
-        var topK = message.Payload["topK"]?.GetValue<int>() ?? 5;
+        var topK = Math.Clamp(message.Payload["topK"]?.GetValue<int>() ?? 5, 1, 100);
 
         var chunks = await memoryStore.SearchAsync(projectId, query, topK);
 

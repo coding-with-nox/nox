@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Nox.Api.Auth;
 using Nox.Domain.Hitl;
 
 namespace Nox.Api.Hubs;
@@ -7,6 +9,7 @@ namespace Nox.Api.Hubs;
 /// SignalR hub for real-time HITL dashboard updates.
 /// Clients subscribe to checkpoint notifications.
 /// </summary>
+[Authorize(Policy = NoxPolicies.AnyUser)]
 public class HitlHub : Hub
 {
     public async Task SubscribeToFlow(string flowRunId)
@@ -23,6 +26,7 @@ public class HitlHub : Hub
 /// <summary>
 /// SignalR hub for real-time agent monitoring.
 /// </summary>
+[Authorize(Policy = NoxPolicies.AnyUser)]
 public class AgentMonitorHub : Hub
 {
     public async Task SubscribeToRun(string flowRunId)

@@ -25,6 +25,7 @@ builder.Services.AddHttpClient("NoxApi", client =>
 // Flow engine (HTTP client to Nox.Api)
 builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 
 var app = builder.Build();

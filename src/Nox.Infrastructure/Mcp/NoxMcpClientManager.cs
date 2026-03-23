@@ -166,8 +166,46 @@ public class NoxMcpClientManager(
         return server;
     }
 
+    /// <summary>Blocks SSRF: only allow http/https, reject RFC-1918/loopback/link-local IPs.</summary>
+    private static void ValidateEndpointUrl(string endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            throw new ArgumentException($"Invalid MCP endpoint URL: '{endpoint}'");
+
+        if (uri.Scheme is not ("http" or "https"))
+            throw new ArgumentException($"MCP endpoint must use HTTP/HTTPS, got: '{uri.Scheme}'");
+
+        var host = uri.Host;
+        if (IsPrivateHost(host))
+            throw new ArgumentException($"MCP endpoint host '{host}' is a private/reserved address (SSRF blocked)");
+    }
+
+    private static bool IsPrivateHost(string host)
+    {
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) || host == "::1")
+            return true;
+
+        if (!System.Net.IPAddress.TryParse(host, out var ip))
+            return false;
+
+        var b = ip.GetAddressBytes();
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && b.Length == 4)
+        {
+            return b[0] == 127                                            // 127.x.x.x loopback
+                || b[0] == 10                                             // 10.0.0.0/8
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)            // 172.16.0.0/12
+                || (b[0] == 192 && b[1] == 168)                          // 192.168.0.0/16
+                || (b[0] == 169 && b[1] == 254)                          // 169.254.0.0/16 link-local
+                || b[0] == 0;                                             // 0.x.x.x
+        }
+
+        return false;
+    }
+
     private async Task<JsonObject> SendJsonRpcAsync(string endpoint, string method, JsonObject parameters, CancellationToken ct)
     {
+        ValidateEndpointUrl(endpoint);
+
         var id = System.Threading.Interlocked.Increment(ref _requestId);
         var request = new JsonObject
         {
