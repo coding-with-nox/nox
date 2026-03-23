@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Nox.Api.Auth;
 using Nox.Api.Hubs;
+using Nox.Application.Commands;
+using Nox.Application.Services;
 using Nox.Domain;
 using Nox.Domain.Hitl;
-using Nox.Orleans.GrainInterfaces;
-using Orleans;
 using System.Text.Json.Nodes;
 
 namespace Nox.Api.Controllers;
@@ -16,8 +16,8 @@ namespace Nox.Api.Controllers;
 [Route("api/[controller]")]
 [Authorize(Policy = NoxPolicies.AnyUser)]
 public class HitlController(
+    IHitlApplicationService hitlService,
     IHitlQueue hitlQueue,
-    IClusterClient orleans,
     IHubContext<HitlHub> hubContext) : ControllerBase
 {
     [HttpGet("pending")]
@@ -39,10 +39,6 @@ public class HitlController(
     [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> SubmitDecision(Guid id, [FromBody] DecisionRequest req)
     {
-        var checkpoint = await hitlQueue.GetPendingAsync(id);
-        if (checkpoint is null) return NotFound($"Checkpoint {id} not found or already resolved");
-
-        // DecidedBy always comes from the authenticated JWT — never from request body
         var decidedBy = User.Identity?.Name
             ?? User.FindFirst("preferred_username")?.Value
             ?? User.FindFirst("email")?.Value;
@@ -50,50 +46,34 @@ public class HitlController(
         if (string.IsNullOrWhiteSpace(decidedBy))
             return Unauthorized("Cannot determine authenticated user identity for HITL decision.");
 
-        var decision = new HitlDecision
+        try
         {
-            CheckpointId = id,
-            Decision     = req.Decision,
-            Payload      = req.Payload,
-            DecidedBy    = decidedBy
-        };
+            var resolved = await hitlService.SubmitDecisionAsync(
+                new SubmitHitlDecisionCommand(id, req.Decision, req.Payload, decidedBy));
 
-        await hitlQueue.SubmitDecisionAsync(id, decision);
+            await hubContext.Clients.All.SendAsync("CheckpointResolved", new
+            {
+                checkpointId = id,
+                decision     = req.Decision,
+                decidedBy
+            });
 
-        if (checkpoint.FlowRunId != Guid.Empty)
-        {
-            try
-            {
-                var flowGrain = orleans.GetGrain<IFlowGrain>(checkpoint.FlowRunId);
-                await flowGrain.ResumeFromCheckpointAsync(id, decision);
-            }
-            catch (Exception ex)
-            {
-                HttpContext.RequestServices
-                    .GetRequiredService<ILogger<HitlController>>()
-                    .LogWarning(ex, "Could not resume flow grain {FlowRunId}", checkpoint.FlowRunId);
-            }
+            return Ok(new { checkpointId = id, decision = req.Decision, status = "Resolved" });
         }
-
-        await hubContext.Clients.All.SendAsync("CheckpointResolved", new
-        {
-            checkpointId = id,
-            decision     = req.Decision,
-            decidedBy    = decidedBy   // username from JWT, not from request body
-        });
-
-        return Ok(new { checkpointId = id, decision = req.Decision, status = "Resolved" });
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+        catch (InvalidOperationException ex) { return Conflict(ex.Message); }
     }
 
     [HttpPost("checkpoint/{id:guid}/escalate")]
     [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> Escalate(Guid id, [FromBody] EscalateRequest req)
     {
-        var checkpoint = await hitlQueue.GetPendingAsync(id);
-        if (checkpoint is null) return NotFound();
-
-        await hitlQueue.EscalateAsync(id, req.Reason ?? "Escalated by user");
-        return Ok();
+        try
+        {
+            await hitlService.EscalateAsync(new EscalateCheckpointCommand(id, req.Reason ?? "Escalated by user"));
+            return Ok();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
     }
 
     [HttpGet("history")]
@@ -105,19 +85,11 @@ public class HitlController(
         var db = HttpContext.RequestServices
             .GetRequiredService<Nox.Infrastructure.Persistence.NoxDbContext>();
 
-        var query = db.HitlCheckpoints
-            .Where(h => h.Status != CheckpointStatus.Pending);
-
+        var query = db.HitlCheckpoints.Where(h => h.Status != CheckpointStatus.Pending);
         if (flowRunId.HasValue)
             query = query.Where(h => h.FlowRunId == flowRunId.Value);
 
-        var history = await query
-            .OrderByDescending(h => h.ResolvedAt)
-            .Skip(skip)
-            .Take(take)
-            .ToListAsync();
-
-        return Ok(history);
+        return Ok(await query.OrderByDescending(h => h.ResolvedAt).Skip(skip).Take(take).ToListAsync());
     }
 }
 

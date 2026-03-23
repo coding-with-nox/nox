@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <ProjectReference Include="..\Nox.Application\Nox.Application.csproj" />
     <ProjectReference Include="..\Nox.Domain\Nox.Domain.csproj" />
     <ProjectReference Include="..\Nox.Infrastructure\Nox.Infrastructure.csproj" />
     <ProjectReference Include="..\Nox.Orleans\Nox.Orleans.csproj" />

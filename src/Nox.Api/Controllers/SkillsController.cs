@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nox.Api.Auth;
+using Nox.Application.Commands;
+using Nox.Application.Services;
 using Nox.Domain;
 using Nox.Domain.Skills;
 using Nox.Infrastructure.Persistence;
@@ -13,7 +15,8 @@ namespace Nox.Api.Controllers;
 [Authorize(Policy = NoxPolicies.AnyUser)]
 public class SkillsController(
     NoxDbContext db,
-    ISkillRegistry skillRegistry) : ControllerBase
+    ISkillRegistry skillRegistry,
+    ISkillApplicationService skillService) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string? scope, [FromQuery] string? status)
@@ -63,7 +66,7 @@ public class SkillsController(
         if (string.IsNullOrWhiteSpace(approvedBy))
             return Unauthorized("Cannot determine authenticated user identity.");
 
-        var skill = await skillRegistry.ApproveSkillAsync(id, approvedBy);
+        var skill = await skillService.ApproveAsync(new ApproveSkillCommand(id, approvedBy));
         return Ok(skill);
     }
 
@@ -78,7 +81,7 @@ public class SkillsController(
         if (string.IsNullOrWhiteSpace(rejectedBy))
             return Unauthorized("Cannot determine authenticated user identity.");
 
-        var skill = await skillRegistry.RejectSkillAsync(id, rejectedBy, req.Reason ?? "No reason given");
+        var skill = await skillService.RejectAsync(new RejectSkillCommand(id, rejectedBy, req.Reason ?? "No reason given"));
         return Ok(skill);
     }
 }

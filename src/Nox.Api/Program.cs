@@ -7,6 +7,7 @@ using Nox.Api.Middleware;
 using Nox.Domain.Agents;
 using Nox.Domain.Flows;
 using Nox.Domain.Hitl;
+using Nox.Application;
 using Nox.Infrastructure;
 using Nox.Infrastructure.Persistence;
 using Nox.Orleans;
@@ -38,6 +39,9 @@ try
 
     // Orleans Silo (co-hosted)
     builder.Host.AddNoxOrleans(builder.Configuration);
+
+    // Application layer (use cases)
+    builder.Services.AddNoxApplication();
 
     // Flow engine + grain resolvers
     builder.Services.AddScoped<IFlowEngine, OrleansFlowEngine>();
@@ -191,8 +195,11 @@ public class OrleansFlowEngine(
         await grain.CancelAsync(reason);
     }
 
-    public Task ResumeAsync(Guid flowRunId, HitlDecision decision) =>
-        Task.CompletedTask; // Resume via HitlController → FlowGrain.ResumeFromCheckpointAsync
+    public async Task ResumeAsync(Guid flowRunId, HitlDecision decision)
+    {
+        var grain = orleans.GetGrain<IFlowGrain>(flowRunId);
+        await grain.ResumeFromCheckpointAsync(decision.CheckpointId, decision);
+    }
 
     public async Task CancelAsync(Guid flowRunId, string reason)
     {

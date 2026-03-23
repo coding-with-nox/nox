@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nox.Api.Auth;
+using Nox.Application.Commands;
+using Nox.Application.Services;
 using Nox.Domain.Flows;
 using Nox.Infrastructure.Persistence;
 using Nox.Orleans.GrainInterfaces;
@@ -15,7 +17,7 @@ namespace Nox.Api.Controllers;
 [Authorize(Policy = NoxPolicies.AnyUser)]
 public class FlowsController(
     NoxDbContext db,
-    IFlowEngine flowEngine,
+    IFlowApplicationService flowService,
     IClusterClient orleans) : ControllerBase
 {
     [HttpGet]
@@ -82,7 +84,7 @@ public class FlowsController(
         var flow = await db.Flows.FindAsync(id);
         if (flow is null) return NotFound($"Flow {id} not found");
 
-        var run = await flowEngine.StartAsync(id, req.Variables);
+        var run = await flowService.StartRunAsync(new StartFlowRunCommand(id, req.Variables));
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
 
@@ -98,8 +100,7 @@ public class FlowsController(
     [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> CancelRun(Guid runId, [FromBody] CancelRunRequest req)
     {
-        var grain = orleans.GetGrain<IFlowGrain>(runId);
-        await grain.CancelAsync(req.Reason ?? "Cancelled by user");
+        await flowService.CancelRunAsync(new CancelFlowRunCommand(runId, req.Reason ?? "Cancelled by user"));
         return Ok();
     }
 }
