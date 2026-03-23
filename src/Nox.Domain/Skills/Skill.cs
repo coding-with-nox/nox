@@ -13,6 +13,7 @@ public class Skill
     public string? GroupId { get; set; }
     public Guid? OwnerAgentId { get; set; }
     public JsonObject Definition { get; set; } = new();
+    public bool IsMandatory { get; set; } = false;
     public SkillStatus Status { get; set; } = SkillStatus.Active;
     public string? ApprovedBy { get; set; }
     public int Version { get; set; } = 1;

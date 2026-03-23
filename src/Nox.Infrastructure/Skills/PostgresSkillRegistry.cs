@@ -30,27 +30,32 @@ public class PostgresSkillRegistry(
         if (cache.TryGetValue(cacheKey, out List<Skill>? cached) && cached is not null)
             return cached;
 
-        // Personal skills (highest priority)
+        // Mandatory skills (highest priority — always included, cannot be overridden)
+        var mandatory = await db.Skills
+            .Where(s => s.IsMandatory && s.Status == SkillStatus.Active)
+            .ToListAsync(ct);
+
+        // Personal skills
         var personal = await db.Skills
-            .Where(s => s.Scope == SkillScope.Personal && s.OwnerAgentId == agentId && s.Status == SkillStatus.Active)
+            .Where(s => !s.IsMandatory && s.Scope == SkillScope.Personal && s.OwnerAgentId == agentId && s.Status == SkillStatus.Active)
             .ToListAsync(ct);
 
         // Group skills
         var group = groupId is not null
             ? await db.Skills
-                .Where(s => s.Scope == SkillScope.Group && s.GroupId == groupId && s.Status == SkillStatus.Active)
+                .Where(s => !s.IsMandatory && s.Scope == SkillScope.Group && s.GroupId == groupId && s.Status == SkillStatus.Active)
                 .ToListAsync(ct)
             : [];
 
-        // Global skills
+        // Global skills (non-mandatory)
         var global = await db.Skills
-            .Where(s => s.Scope == SkillScope.Global && s.Status == SkillStatus.Active)
+            .Where(s => !s.IsMandatory && s.Scope == SkillScope.Global && s.Status == SkillStatus.Active)
             .ToListAsync(ct);
 
-        // Merge with precedence: Personal > Group > Global (no duplicates by slug)
+        // Merge with precedence: Mandatory > Personal > Group > Global (no duplicates by slug)
         var seen = new HashSet<string>();
         var result = new List<Skill>();
-        foreach (var s in personal.Concat(group).Concat(global))
+        foreach (var s in mandatory.Concat(personal).Concat(group).Concat(global))
         {
             if (seen.Add(s.Slug)) result.Add(s);
         }

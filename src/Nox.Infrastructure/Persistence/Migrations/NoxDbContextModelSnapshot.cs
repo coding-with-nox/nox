@@ -650,6 +650,11 @@ namespace Nox.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("group_id");
 
+                    b.Property<bool>("IsMandatory")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_mandatory");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")

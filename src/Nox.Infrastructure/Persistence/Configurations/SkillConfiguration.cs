@@ -26,6 +26,7 @@ public class SkillConfiguration : IEntityTypeConfiguration<Skill>
         builder.Property(s => s.Scope).HasColumnName("scope").HasConversion<string>();
         builder.Property(s => s.GroupId).HasColumnName("group_id");
         builder.Property(s => s.OwnerAgentId).HasColumnName("owner_agent_id");
+        builder.Property(s => s.IsMandatory).HasColumnName("is_mandatory").HasDefaultValue(false);
         builder.Property(s => s.Status).HasColumnName("status").HasConversion<string>();
         builder.Property(s => s.ApprovedBy).HasColumnName("approved_by");
         builder.Property(s => s.Version).HasColumnName("version");
