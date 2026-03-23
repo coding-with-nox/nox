@@ -83,6 +83,7 @@ services:
     container_name: nox-seq
     environment:
       ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_FIRSTRUN_ADMINPASSWORD}
     ports:
       - "5341:5341"   # ingestion
       - "8081:80"     # UI → http://localhost:8081
@@ -91,7 +92,7 @@ services:
 
   # ── Keycloak (identity provider — OAuth2 / OIDC) ────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26
+    image: quay.io/keycloak/keycloak:26.1
     container_name: nox-keycloak
     command: start-dev --import-realm
     environment:
