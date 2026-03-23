@@ -1,3 +1,5 @@
+using Orleans;
+
 namespace Nox.Domain.Memory;
 
 public class MemoryEntry
@@ -15,16 +17,17 @@ public class MemoryEntry
     public DateTimeOffset? ExpiresAt { get; init; }
 }
 
+[GenerateSerializer]
 public class MemoryChunk
 {
-    public required Guid Id { get; init; }
-    public required string Content { get; init; }
-    public MemoryContentType ContentType { get; init; }
-    public float Score { get; init; }
-    public int TokenCount { get; init; }
-    public List<string> Tags { get; init; } = [];
-    public float Importance { get; init; }
-    public DateTimeOffset CreatedAt { get; init; }
+    [Id(0)] public required Guid Id { get; init; }
+    [Id(1)] public required string Content { get; init; }
+    [Id(2)] public MemoryContentType ContentType { get; init; }
+    [Id(3)] public float Score { get; init; }
+    [Id(4)] public int TokenCount { get; init; }
+    [Id(5)] public List<string> Tags { get; init; } = [];
+    [Id(6)] public float Importance { get; init; }
+    [Id(7)] public DateTimeOffset CreatedAt { get; init; }
 }
 
 public class MemoryFilter

@@ -96,9 +96,17 @@ INSERT INTO OrleansQuery(QueryKey, QueryText) VALUES
 ),
 (
     'InsertMembershipVersionKey','
+    BEGIN;
+
     INSERT INTO OrleansMembershipVersionTable(DeploymentId)
     SELECT @DeploymentId
-    WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId)
+    WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId);
+
+    SELECT DeploymentId, Timestamp, Version
+    FROM OrleansMembershipVersionTable
+    WHERE DeploymentId = @DeploymentId;
+
+    COMMIT;
 '
 ),
 (
@@ -292,6 +300,21 @@ INSERT INTO OrleansQuery(QueryKey, QueryText) VALUES
     'DeleteReminderRowsKey','
     DELETE FROM OrleansRemindersTable
     WHERE ServiceId = @ServiceId
+'
+),
+(
+    'GatewaysQueryKey','
+    SELECT Address, ProxyPort, Generation
+    FROM OrleansMembershipTable
+    WHERE DeploymentId = @DeploymentId AND Status = 3 AND ProxyPort > 0
+'
+),
+(
+    'CleanupDefunctSiloEntriesKey','
+    DELETE FROM OrleansMembershipTable
+    WHERE DeploymentId = @DeploymentId
+      AND IAmAliveTime < @IAmAliveTime
+      AND Status != 3
 '
 )
 ON CONFLICT (QueryKey) DO NOTHING;

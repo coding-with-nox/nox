@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS skills (
     status TEXT NOT NULL DEFAULT 'Active',
     approved_by TEXT,
     version INT NOT NULL DEFAULT 1,
+    is_mandatory BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -176,6 +177,29 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     approved_by TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================================
+-- AI Audit Log (security / GDPR compliance)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_audit_log (
+    "Id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "Timestamp" TIMESTAMPTZ NOT NULL,
+    "AgentId" UUID NOT NULL,
+    "FlowRunId" UUID NOT NULL,
+    "EventType" VARCHAR(100) NOT NULL,
+    "ModelUsed" VARCHAR(100) NOT NULL,
+    "InputTokens" INT NOT NULL DEFAULT 0,
+    "OutputTokens" INT NOT NULL DEFAULT 0,
+    "DecidedBy" VARCHAR(200),
+    "Decision" VARCHAR(200),
+    "InputHash" VARCHAR(64),
+    "OutputHash" VARCHAR(64),
+    "Summary" VARCHAR(500),
+    "RetainUntil" TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "IX_ai_audit_log_AgentId" ON ai_audit_log("AgentId");
+CREATE INDEX IF NOT EXISTS "IX_ai_audit_log_RetainUntil" ON ai_audit_log("RetainUntil");
+CREATE INDEX IF NOT EXISTS "IX_ai_audit_log_Timestamp" ON ai_audit_log("Timestamp");
 
 -- ============================================================
 -- Project Memory (metadata; vectors in Qdrant)
@@ -395,4 +419,21 @@ VALUES (
     }',
     'system'
 )
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- EF Migrations history — marks all migrations as already applied
+-- so EF Core does not attempt to re-create the schema on startup
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+    "MigrationId" VARCHAR(150) NOT NULL,
+    "ProductVersion" VARCHAR(32) NOT NULL,
+    CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
+);
+
+INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion") VALUES
+    ('20260322083206_Initial',                            '10.0.5'),
+    ('20260322094005_Phase5_McpServerStatusRejected',     '10.0.5'),
+    ('20260322234456_Security_AiAuditLog_GdprCompliance', '10.0.5'),
+    ('20260323000000_AddMandatorySkillFlag',               '10.0.5')
 ON CONFLICT DO NOTHING;

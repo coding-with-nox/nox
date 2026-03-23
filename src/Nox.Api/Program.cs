@@ -51,6 +51,7 @@ try
     // MCP server (exposes Nox as MCP tool provider — HTTP transport requires ModelContextProtocol 1.x+)
     builder.Services
         .AddMcpServer()
+        .WithHttpTransport()
         .WithToolsFromAssembly(typeof(Nox.McpServer.Tools.FlowTools).Assembly);
 
     builder.Services.AddScoped<Nox.McpServer.Tools.IFlowRepository, EfFlowRepository>();

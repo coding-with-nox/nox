@@ -1,0 +1,156 @@
+# Run with: docker compose --env-file ./infrastructure/.env up -d
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nox-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-orleans:
+    image: postgres:16-alpine
+    container_name: nox-postgres-orleans
+    environment:
+      POSTGRES_USER: ${POSTGRES_ORLEANS_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ORLEANS_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_ORLEANS_DB}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_orleans_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/orleans-init.sql:/docker-entrypoint-initdb.d/orleans-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ORLEANS_USER} -d ${POSTGRES_ORLEANS_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nox-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: nox-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  seq:
+    image: datalust/seq:latest
+    container_name: nox-seq
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_FIRSTRUN_ADMINPASSWORD}
+    ports:
+      - "5341:5341"
+      - "8081:80"
+    volumes:
+      - seq_data:/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    container_name: nox-keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Applications ──────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Nox.Api/Dockerfile
+    container_name: nox-api
+    ports:
+      - "5092:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Nox__Database__ConnectionString: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SslMode=Disable"
+      Nox__Orleans__PostgresConnectionString: "Host=postgres-orleans;Port=5432;Database=${POSTGRES_ORLEANS_DB};Username=${POSTGRES_ORLEANS_USER};Password=${POSTGRES_ORLEANS_PASSWORD};SslMode=Disable"
+      Nox__Redis__ConnectionString: "redis:6379,password=${REDIS_PASSWORD}"
+      Nox__Qdrant__Host: qdrant
+      Nox__Qdrant__Port: "6334"
+      Nox__Qdrant__ApiKey: ${QDRANT_API_KEY}
+      Nox__Auth__Authority: "http://keycloak:8080/realms/nox"
+      Nox__Cors__AllowedOrigins__0: "http://localhost:5152"
+      Nox__Llm__Providers__Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+      SEQ_URL: "http://seq:5341"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-orleans:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: src/Nox.Dashboard/Dockerfile
+    container_name: nox-dashboard
+    ports:
+      - "5152:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Nox__ApiBaseUrl: "http://api:8080"
+      Nox__Database__ConnectionString: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SslMode=Disable"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  postgres_orleans_data:
+  redis_data:
+  qdrant_data:
+  seq_data:
