@@ -9,6 +9,7 @@ using Nox.Domain.Memory;
 using Nox.Domain.Mcp;
 using Nox.Domain.Messages;
 using Nox.Domain.Skills;
+using Nox.Infrastructure.GitHub;
 using Nox.Orleans.GrainInterfaces;
 using Nox.Orleans.States;
 using Orleans;
@@ -25,6 +26,7 @@ public class AgentGrain(
     ISkillRegistry skillRegistry,
     IHitlQueue hitlQueue,
     IMcpClientManager mcpClientManager,
+    GitHubToolHandler gitHubToolHandler,
     ILogger<AgentGrain> logger)
     : Grain, IAgentGrain
 {
@@ -275,6 +277,14 @@ public class AgentGrain(
         var skills = await skillRegistry.GetEffectiveSkillsAsync(state.State.Id);
         foreach (var skill in skills.Where(s => s.Status == SkillStatus.Active))
         {
+            // GitHub skills: create typed tools that call the real API
+            if (skill.Slug.StartsWith("github-"))
+            {
+                var tool = gitHubToolHandler.CreateAITool(skill, input.Payload);
+                if (tool is not null) tools.Add(tool);
+                continue;
+            }
+
             var captured = skill;
             tools.Add(AIFunctionFactory.Create(
                 (string args = "") => Task.FromResult($"Executed skill '{captured.Slug}': {captured.Definition.ToJsonString()}"),

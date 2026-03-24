@@ -56,6 +56,14 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
+        // HTTP client + handler for GitHub API
+        services.AddHttpClient("GitHub", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.BaseAddress = new Uri("https://api.github.com");
+        });
+        services.AddScoped<Nox.Infrastructure.GitHub.GitHubToolHandler>();
+
         // Domain services
         services.AddScoped<IHitlQueue, PostgresHitlQueue>();
         services.AddScoped<ISkillRegistry, PostgresSkillRegistry>();
