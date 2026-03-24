@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nox.Dashboard.Components;
 using Nox.Dashboard.Services;
