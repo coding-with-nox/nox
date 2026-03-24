@@ -3,7 +3,7 @@
 @using Nox.Domain.Flows
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IFlowEngine FlowEngine
 @inject NavigationManager Navigation
 
@@ -149,8 +149,9 @@
 
     private async Task LoadData()
     {
-        _flows = await Db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
-        _runs = await Db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(50).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _flows = await db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
+        _runs = await db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(50).ToListAsync();
     }
 
     private void ViewFlow(Flow flow)
@@ -175,8 +176,9 @@
             ProjectId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
             CreatedBy = "HITL User"
         };
-        Db.Flows.Add(flow);
-        await Db.SaveChangesAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Flows.Add(flow);
+        await db.SaveChangesAsync();
 
         _showCreateModal = false;
         _newFlowName = string.Empty;

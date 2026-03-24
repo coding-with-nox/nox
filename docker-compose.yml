@@ -94,12 +94,6 @@ services:
       - "8080:8080"
     volumes:
       - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
 
   # ── Applications ──────────────────────────────────────────────────────────────
 
@@ -131,7 +125,7 @@ services:
       redis:
         condition: service_healthy
       keycloak:
-        condition: service_healthy
+        condition: service_started
 
   dashboard:
     build:
@@ -145,6 +139,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Nox__ApiBaseUrl: "http://api:8080"
       Nox__Database__ConnectionString: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SslMode=Disable"
+      Nox__Redis__ConnectionString: "redis:6379,password=${REDIS_PASSWORD}"
+      Nox__Qdrant__Host: qdrant
+      Nox__Qdrant__Port: "6334"
+      Nox__Qdrant__ApiKey: ${QDRANT_API_KEY}
     depends_on:
       - api
 

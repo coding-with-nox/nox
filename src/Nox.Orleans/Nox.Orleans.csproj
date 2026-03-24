@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
     <PackageReference Include="Microsoft.Orleans.Reminders.Redis" Version="10.0.1" />
     <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
   </ItemGroup>
 
   <PropertyGroup>

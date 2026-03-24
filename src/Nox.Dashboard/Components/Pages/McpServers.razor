@@ -2,7 +2,7 @@
 @using Microsoft.EntityFrameworkCore
 @using Nox.Domain.Mcp
 @using Nox.Infrastructure.Persistence
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IMcpClientManager McpManager
 @inject IHttpContextAccessor HttpContextAccessor
 
@@ -129,7 +129,8 @@
     private async Task Refresh()
     {
         _errorMsg = string.Empty;
-        _servers = await Db.McpServers.OrderByDescending(s => s.Status).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _servers = await db.McpServers.OrderByDescending(s => s.Status).ToListAsync();
     }
 
     private async Task Approve(string serverId)
@@ -149,10 +150,11 @@
     {
         try
         {
-            var server = await Db.McpServers.FindAsync(serverId);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var server = await db.McpServers.FindAsync(serverId);
             if (server is null) return;
             server.Status = McpServerStatus.Rejected;
-            await Db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             await Refresh();
         }
         catch (Exception ex)

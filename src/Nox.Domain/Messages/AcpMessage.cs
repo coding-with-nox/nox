@@ -1,19 +1,21 @@
 using System.Text.Json.Nodes;
 using Nox.Domain.Agents;
+using Orleans;
 
 namespace Nox.Domain.Messages;
 
+[GenerateSerializer]
 public class AcpMessage
 {
-    public Guid Id { get; init; } = Guid.NewGuid();
-    public Guid CorrelationId { get; init; } = Guid.NewGuid();
-    public AcpMessageType Type { get; init; } = AcpMessageType.Event;
-    public AgentAddress? From { get; init; }
-    public AgentAddress? To { get; init; }
-    public required string Topic { get; init; }
-    public JsonObject Payload { get; init; } = new();
-    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
-    public TimeSpan? Ttl { get; init; }
+    [Id(0)] public Guid Id { get; init; } = Guid.NewGuid();
+    [Id(1)] public Guid CorrelationId { get; init; } = Guid.NewGuid();
+    [Id(2)] public AcpMessageType Type { get; init; } = AcpMessageType.Event;
+    [Id(3)] public AgentAddress? From { get; init; }
+    [Id(4)] public AgentAddress? To { get; init; }
+    [Id(5)] public required string Topic { get; init; }
+    [Id(6)] public JsonObject Payload { get; init; } = new();
+    [Id(7)] public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    [Id(8)] public TimeSpan? Ttl { get; init; }
 }
 
 public static class AcpTopics

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Orleans;
 
 namespace Nox.Domain.Agents;
 
@@ -47,30 +48,34 @@ public class Agent
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-public record AgentAddress(Guid AgentId, Guid FlowRunId);
+[GenerateSerializer]
+public record AgentAddress([property: Id(0)] Guid AgentId, [property: Id(1)] Guid FlowRunId);
 
+[GenerateSerializer]
 public class TaskInput
 {
-    public required string FlowNodeId { get; init; }
-    public required Guid FlowRunId { get; init; }
-    public JsonObject Payload { get; init; } = new();
-    public string? ParentTaskId { get; init; }
+    [Id(0)] public required string FlowNodeId { get; init; }
+    [Id(1)] public required Guid FlowRunId { get; init; }
+    [Id(2)] public JsonObject Payload { get; init; } = new();
+    [Id(3)] public string? ParentTaskId { get; init; }
 }
 
+[GenerateSerializer]
 public class TaskResult
 {
-    public required Guid TaskId { get; init; }
-    public required bool Success { get; init; }
-    public JsonObject Output { get; init; } = new();
-    public int TokensUsed { get; init; }
-    public string? Error { get; init; }
+    [Id(0)] public required Guid TaskId { get; init; }
+    [Id(1)] public required bool Success { get; init; }
+    [Id(2)] public JsonObject Output { get; init; } = new();
+    [Id(3)] public int TokensUsed { get; init; }
+    [Id(4)] public string? Error { get; init; }
 }
 
+[GenerateSerializer]
 public class AgentInitRequest
 {
-    public required Guid TemplateId { get; init; }
-    public required Guid FlowRunId { get; init; }
-    public required Guid ProjectId { get; init; }
-    public Guid? ParentAgentId { get; init; }
-    public int MaxSubAgents { get; init; } = 3;
+    [Id(0)] public required Guid TemplateId { get; init; }
+    [Id(1)] public required Guid FlowRunId { get; init; }
+    [Id(2)] public required Guid ProjectId { get; init; }
+    [Id(3)] public Guid? ParentAgentId { get; init; }
+    [Id(4)] public int MaxSubAgents { get; init; } = 3;
 }

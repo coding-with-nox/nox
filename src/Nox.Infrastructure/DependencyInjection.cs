@@ -29,6 +29,7 @@ public static class DependencyInjection
         var dbConnStr = configuration["Nox:Database:ConnectionString"]
             ?? throw new InvalidOperationException("Nox:Database:ConnectionString is not configured. Set it via appsettings.Development.json or environment variable.");
         services.AddDbContext<NoxDbContext>(options => options.UseNpgsql(dbConnStr));
+        services.AddDbContextFactory<NoxDbContext>(options => options.UseNpgsql(dbConnStr), ServiceLifetime.Scoped);
 
         // Redis
         var redisConnStr = configuration["Nox:Redis:ConnectionString"]

@@ -72,6 +72,77 @@ CREATE TABLE IF NOT EXISTS OrleansStorage
 CREATE UNIQUE INDEX IF NOT EXISTS UX_Storage
     ON OrleansStorage (GrainIdHash, GrainIdN0, GrainIdN1, GrainTypeHash, GrainTypeString, GrainIdExtensionString, ServiceId);
 
+-- WriteToStorage function (Orleans 10 grain persistence)
+CREATE OR REPLACE FUNCTION WriteToStorage(
+    _GrainIdHash integer,
+    _GrainIdN0 bigint,
+    _GrainIdN1 bigint,
+    _GrainTypeHash integer,
+    _GrainTypeString character varying,
+    _GrainIdExtensionString character varying,
+    _ServiceId character varying,
+    _GrainStateVersion integer,
+    _PayloadBinary bytea)
+    RETURNS TABLE(NewGrainStateVersion integer)
+    LANGUAGE 'plpgsql'
+AS $function$
+    DECLARE
+     _newGrainStateVersion integer := _GrainStateVersion;
+     RowCountVar integer := 0;
+    BEGIN
+    IF _GrainStateVersion IS NOT NULL
+    THEN
+        UPDATE OrleansStorage
+        SET
+            PayloadBinary = _PayloadBinary,
+            ModifiedOn = (now() at time zone 'utc'),
+            Version = Version + 1
+        WHERE
+            GrainIdHash = _GrainIdHash AND _GrainIdHash IS NOT NULL
+            AND GrainTypeHash = _GrainTypeHash AND _GrainTypeHash IS NOT NULL
+            AND GrainIdN0 = _GrainIdN0 AND _GrainIdN0 IS NOT NULL
+            AND GrainIdN1 = _GrainIdN1 AND _GrainIdN1 IS NOT NULL
+            AND GrainTypeString = _GrainTypeString AND _GrainTypeString IS NOT NULL
+            AND ((_GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString = _GrainIdExtensionString) OR _GrainIdExtensionString IS NULL AND GrainIdExtensionString IS NULL)
+            AND ServiceId = _ServiceId AND _ServiceId IS NOT NULL
+            AND Version IS NOT NULL AND Version = _GrainStateVersion AND _GrainStateVersion IS NOT NULL;
+        GET DIAGNOSTICS RowCountVar = ROW_COUNT;
+        IF RowCountVar > 0
+        THEN
+            _newGrainStateVersion := _GrainStateVersion + 1;
+        END IF;
+    END IF;
+    IF _GrainStateVersion IS NULL
+    THEN
+        INSERT INTO OrleansStorage
+        (
+            GrainIdHash, GrainIdN0, GrainIdN1, GrainTypeHash, GrainTypeString,
+            GrainIdExtensionString, ServiceId, PayloadBinary, ModifiedOn, Version
+        )
+        SELECT
+            _GrainIdHash, _GrainIdN0, _GrainIdN1, _GrainTypeHash, _GrainTypeString,
+            _GrainIdExtensionString, _ServiceId, _PayloadBinary, (now() at time zone 'utc'), 1
+        WHERE NOT EXISTS (
+            SELECT 1 FROM OrleansStorage
+            WHERE
+                GrainIdHash = _GrainIdHash AND _GrainIdHash IS NOT NULL
+                AND GrainTypeHash = _GrainTypeHash AND _GrainTypeHash IS NOT NULL
+                AND GrainIdN0 = _GrainIdN0 AND _GrainIdN0 IS NOT NULL
+                AND GrainIdN1 = _GrainIdN1 AND _GrainIdN1 IS NOT NULL
+                AND GrainTypeString = _GrainTypeString AND _GrainTypeString IS NOT NULL
+                AND ((_GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString = _GrainIdExtensionString) OR _GrainIdExtensionString IS NULL AND GrainIdExtensionString IS NULL)
+                AND ServiceId = _ServiceId AND _ServiceId IS NOT NULL
+        );
+        GET DIAGNOSTICS RowCountVar = ROW_COUNT;
+        IF RowCountVar > 0
+        THEN
+            _newGrainStateVersion := 1;
+        END IF;
+    END IF;
+    RETURN QUERY SELECT _newGrainStateVersion AS NewGrainStateVersion;
+    END
+$function$;
+
 -- ============================================================
 -- Queries (required by Orleans ADO.NET provider)
 -- ============================================================
@@ -96,66 +167,70 @@ INSERT INTO OrleansQuery(QueryKey, QueryText) VALUES
 ),
 (
     'InsertMembershipVersionKey','
-    BEGIN;
-
-    INSERT INTO OrleansMembershipVersionTable(DeploymentId)
-    SELECT @DeploymentId
-    WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId);
-
-    SELECT DeploymentId, Timestamp, Version
-    FROM OrleansMembershipVersionTable
-    WHERE DeploymentId = @DeploymentId;
-
-    COMMIT;
+    WITH ins AS (
+        INSERT INTO OrleansMembershipVersionTable(DeploymentId)
+        SELECT @DeploymentId
+        WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId)
+        RETURNING 1
+    )
+    SELECT COUNT(*) > 0 FROM ins
 '
 ),
 (
     'InsertMembershipKey','
-    BEGIN;
-
-    INSERT INTO OrleansMembershipVersionTable(DeploymentId, Timestamp, Version)
-    SELECT @DeploymentId, now() AT TIME ZONE ''utc'', 0
-    WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId);
-
-    INSERT INTO OrleansMembershipTable
-    (
-        DeploymentId,
-        Address,
-        Port,
-        Generation,
-        SiloName,
-        HostName,
-        Status,
-        ProxyPort,
-        StartTime,
-        IAmAliveTime
+    WITH
+    v_ins AS (
+        INSERT INTO OrleansMembershipVersionTable(DeploymentId, Timestamp, Version)
+        SELECT @DeploymentId, now() AT TIME ZONE ''utc'', 0
+        WHERE NOT EXISTS (SELECT 1 FROM OrleansMembershipVersionTable WHERE DeploymentId = @DeploymentId)
+        RETURNING 1
+    ),
+    m_ins AS (
+        INSERT INTO OrleansMembershipTable
+        (
+            DeploymentId,
+            Address,
+            Port,
+            Generation,
+            SiloName,
+            HostName,
+            Status,
+            ProxyPort,
+            StartTime,
+            IAmAliveTime
+        )
+        SELECT @DeploymentId, @Address, @Port, @Generation, @SiloName, @HostName, @Status, @ProxyPort, @StartTime, @IAmAliveTime
+        WHERE NOT EXISTS (
+            SELECT 1 FROM OrleansMembershipTable
+            WHERE DeploymentId = @DeploymentId AND Address = @Address AND Port = @Port AND Generation = @Generation
+        )
+        RETURNING 1
+    ),
+    v_upd AS (
+        UPDATE OrleansMembershipVersionTable
+        SET Timestamp = now() AT TIME ZONE ''utc'', Version = Version + 1
+        WHERE DeploymentId = @DeploymentId AND Version = @Version
+        RETURNING 1
     )
-    SELECT @DeploymentId, @Address, @Port, @Generation, @SiloName, @HostName, @Status, @ProxyPort, @StartTime, @IAmAliveTime
-    WHERE NOT EXISTS (
-        SELECT 1 FROM OrleansMembershipTable
-        WHERE DeploymentId = @DeploymentId AND Address = @Address AND Port = @Port AND Generation = @Generation
-    );
-
-    UPDATE OrleansMembershipVersionTable
-    SET Timestamp = now() AT TIME ZONE ''utc'', Version = Version + 1
-    WHERE DeploymentId = @DeploymentId AND Version = @Version;
-
-    COMMIT;
+    SELECT COUNT(*) > 0 FROM v_upd
 '
 ),
 (
     'UpdateMembershipKey','
-    BEGIN;
-
-    UPDATE OrleansMembershipTable
-    SET Status = @Status, SuspectTimes = @SuspectTimes, IAmAliveTime = @IAmAliveTime
-    WHERE DeploymentId = @DeploymentId AND Address = @Address AND Port = @Port AND Generation = @Generation;
-
-    UPDATE OrleansMembershipVersionTable
-    SET Timestamp = now() AT TIME ZONE ''utc'', Version = Version + 1
-    WHERE DeploymentId = @DeploymentId AND Version = @Version;
-
-    COMMIT;
+    WITH
+    m_upd AS (
+        UPDATE OrleansMembershipTable
+        SET Status = @Status, SuspectTimes = @SuspectTimes, IAmAliveTime = @IAmAliveTime
+        WHERE DeploymentId = @DeploymentId AND Address = @Address AND Port = @Port AND Generation = @Generation
+        RETURNING 1
+    ),
+    v_upd AS (
+        UPDATE OrleansMembershipVersionTable
+        SET Timestamp = now() AT TIME ZONE ''utc'', Version = Version + 1
+        WHERE DeploymentId = @DeploymentId AND Version = @Version
+        RETURNING 1
+    )
+    SELECT COUNT(*) > 0 FROM v_upd
 '
 ),
 (
@@ -181,58 +256,59 @@ INSERT INTO OrleansQuery(QueryKey, QueryText) VALUES
 '
 ),
 (
-    'UpsertGrainStateKey','
-    INSERT INTO OrleansStorage
-    (
-        GrainIdHash,
-        GrainIdN0,
-        GrainIdN1,
-        GrainTypeHash,
-        GrainTypeString,
-        GrainIdExtensionString,
-        ServiceId,
-        PayloadBinary,
-        ModifiedOn,
-        Version
-    )
-    VALUES(@GrainIdHash, @GrainIdN0, @GrainIdN1, @GrainTypeHash, @GrainTypeString, @GrainIdExtensionString, @ServiceId, @PayloadBinary, now() AT TIME ZONE ''utc'', 1)
-    ON CONFLICT (GrainIdHash, GrainIdN0, GrainIdN1, GrainTypeHash, GrainTypeString, GrainIdExtensionString, ServiceId)
-    DO UPDATE SET
-        PayloadBinary = excluded.PayloadBinary,
-        ModifiedOn    = excluded.ModifiedOn,
-        Version       = OrleansStorage.Version + 1
-    WHERE OrleansStorage.Version IS NULL OR @Version IS NULL OR OrleansStorage.Version = @Version
-    RETURNING Version
+    'WriteToStorageKey','
+        select * from WriteToStorage(@GrainIdHash, @GrainIdN0, @GrainIdN1, @GrainTypeHash, @GrainTypeString, @GrainIdExtensionString, @ServiceId, @GrainStateVersion, @PayloadBinary);
 '
 ),
 (
     'ClearStorageKey','
     UPDATE OrleansStorage
-    SET PayloadBinary = NULL,
-        ModifiedOn    = now() AT TIME ZONE ''utc'',
-        Version       = Version + 1
-    WHERE GrainIdHash              = @GrainIdHash
-    AND   GrainIdN0                = @GrainIdN0
-    AND   GrainIdN1                = @GrainIdN1
-    AND   GrainTypeHash            = @GrainTypeHash
-    AND   GrainTypeString          = @GrainTypeString
-    AND   GrainIdExtensionString IS NOT DISTINCT FROM @GrainIdExtensionString
-    AND   ServiceId                = @ServiceId
-    AND   (@Version IS NULL OR Version = @Version)
-    RETURNING Version
+    SET
+        PayloadBinary = NULL,
+        Version = Version + 1
+    WHERE
+        GrainIdHash = @GrainIdHash AND @GrainIdHash IS NOT NULL
+        AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
+        AND GrainIdN0 = @GrainIdN0 AND @GrainIdN0 IS NOT NULL
+        AND GrainIdN1 = @GrainIdN1 AND @GrainIdN1 IS NOT NULL
+        AND GrainTypeString = @GrainTypeString AND @GrainTypeString IS NOT NULL
+        AND ((@GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString = @GrainIdExtensionString) OR @GrainIdExtensionString IS NULL AND GrainIdExtensionString IS NULL)
+        AND ServiceId = @ServiceId AND @ServiceId IS NOT NULL
+        AND Version IS NOT NULL AND Version = @GrainStateVersion AND @GrainStateVersion IS NOT NULL
+    Returning Version as NewGrainStateVersion
 '
 ),
 (
     'ReadFromStorageKey','
-    SELECT PayloadBinary, ModifiedOn, Version
-    FROM OrleansStorage
-    WHERE GrainIdHash              = @GrainIdHash
-    AND   GrainIdN0                = @GrainIdN0
-    AND   GrainIdN1                = @GrainIdN1
-    AND   GrainTypeHash            = @GrainTypeHash
-    AND   GrainTypeString          = @GrainTypeString
-    AND   GrainIdExtensionString IS NOT DISTINCT FROM @GrainIdExtensionString
-    AND   ServiceId                = @ServiceId
+    SELECT
+        PayloadBinary,
+        (now() at time zone ''utc''),
+        Version
+    FROM
+        OrleansStorage
+    WHERE
+        GrainIdHash = @GrainIdHash
+        AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
+        AND GrainIdN0 = @GrainIdN0 AND @GrainIdN0 IS NOT NULL
+        AND GrainIdN1 = @GrainIdN1 AND @GrainIdN1 IS NOT NULL
+        AND GrainTypeString = @GrainTypeString AND GrainTypeString IS NOT NULL
+        AND ((@GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString = @GrainIdExtensionString) OR @GrainIdExtensionString IS NULL AND GrainIdExtensionString IS NULL)
+        AND ServiceId = @ServiceId AND @ServiceId IS NOT NULL
+'
+),
+(
+    'DeleteStorageKey','
+    DELETE FROM OrleansStorage
+    WHERE
+        GrainIdHash = @GrainIdHash AND @GrainIdHash IS NOT NULL
+        AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
+        AND GrainIdN0 = @GrainIdN0 AND @GrainIdN0 IS NOT NULL
+        AND GrainIdN1 = @GrainIdN1 AND @GrainIdN1 IS NOT NULL
+        AND GrainTypeString = @GrainTypeString AND @GrainTypeString IS NOT NULL
+        AND ((@GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString IS NOT NULL AND GrainIdExtensionString = @GrainIdExtensionString) OR @GrainIdExtensionString IS NULL AND GrainIdExtensionString IS NULL)
+        AND ServiceId = @ServiceId AND @ServiceId IS NOT NULL
+        AND Version IS NOT NULL AND Version = @GrainStateVersion AND @GrainStateVersion IS NOT NULL
+    Returning Version + 1 as NewGrainStateVersion
 '
 ),
 (

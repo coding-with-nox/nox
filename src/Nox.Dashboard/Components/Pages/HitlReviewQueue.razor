@@ -103,6 +103,11 @@
     protected override async Task OnInitializedAsync()
     {
         _checkpoints = await HitlQueue.GetAllPendingAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
 
         var apiBase = Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000";
         _hubConnection = new HubConnectionBuilder()
@@ -128,7 +133,9 @@
             });
         });
 
-        await _hubConnection.StartAsync();
+        try { await _hubConnection.StartAsync(); }
+        catch { /* hub is optional — live updates unavailable without auth */ }
+        StateHasChanged();
     }
 
     private async Task Decide(Guid checkpointId, string decision)

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Orleans;
 
 namespace Nox.Domain.Hitl;
 
@@ -23,11 +24,12 @@ public class HitlCheckpoint
     public bool IsExpired => ExpiresAt.HasValue && DateTimeOffset.UtcNow > ExpiresAt.Value;
 }
 
+[GenerateSerializer]
 public class HitlDecision
 {
-    public required Guid CheckpointId { get; init; }
-    public required string Decision { get; init; }
-    public JsonObject? Payload { get; init; }
-    public required string DecidedBy { get; init; }
-    public DateTimeOffset DecidedAt { get; init; } = DateTimeOffset.UtcNow;
+    [Id(0)] public required Guid CheckpointId { get; init; }
+    [Id(1)] public required string Decision { get; init; }
+    [Id(2)] public JsonObject? Payload { get; init; }
+    [Id(3)] public required string DecidedBy { get; init; }
+    [Id(4)] public DateTimeOffset DecidedAt { get; init; } = DateTimeOffset.UtcNow;
 }

@@ -3,7 +3,7 @@
 @using Nox.Domain
 @using Nox.Domain.Hitl
 @using Nox.Infrastructure.Persistence
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IHitlQueue HitlQueue
 
 <PageTitle>Dashboard — Nox</PageTitle>
@@ -166,26 +166,28 @@
         _pendingCheckpointList = await HitlQueue.GetAllPendingAsync(take: 10);
         _pendingCheckpoints = _pendingCheckpointList.Count;
 
-        _activeFlowRuns = await Db.FlowRuns.CountAsync(r =>
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _activeFlowRuns = await db.FlowRuns.CountAsync(r =>
             r.Status == FlowRunStatus.Running || r.Status == FlowRunStatus.Paused);
 
-        _runningAgents = await Db.Agents.CountAsync(a =>
+        _runningAgents = await db.Agents.CountAsync(a =>
             a.Status == AgentStatus.Running || a.Status == AgentStatus.WaitingForHitl);
 
-        _pendingSkills = await Db.Skills.CountAsync(s => s.Status == SkillStatus.PendingApproval);
+        _pendingSkills = await db.Skills.CountAsync(s => s.Status == SkillStatus.PendingApproval);
 
-        _totalFlows = await Db.Flows.CountAsync();
-        _totalTemplates = await Db.AgentTemplates.CountAsync();
-        _activeSkills = await Db.Skills.CountAsync(s => s.Status == SkillStatus.Active);
-        _mcpServers = await Db.McpServers.CountAsync(s => s.Status == McpServerStatus.Active);
+        _totalFlows = await db.Flows.CountAsync();
+        _totalTemplates = await db.AgentTemplates.CountAsync();
+        _activeSkills = await db.Skills.CountAsync(s => s.Status == SkillStatus.Active);
+        _mcpServers = await db.McpServers.CountAsync(s => s.Status == McpServerStatus.Active);
 
-        _recentRuns = await Db.FlowRuns
+        _recentRuns = await db.FlowRuns
             .OrderByDescending(r => r.StartedAt)
             .Take(8)
             .ToListAsync();
 
         var flowIds = _recentRuns.Select(r => r.FlowId).Distinct();
-        _flows = await Db.Flows
+        _flows = await db.Flows
             .Where(f => flowIds.Contains(f.Id))
             .ToDictionaryAsync(f => f.Id, f => f.Name);
 

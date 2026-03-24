@@ -8,7 +8,7 @@ using StackExchange.Redis;
 namespace Nox.Infrastructure.Hitl;
 
 public class PostgresHitlQueue(
-    NoxDbContext db,
+    IDbContextFactory<NoxDbContext> dbFactory,
     IConnectionMultiplexer redis,
     ILogger<PostgresHitlQueue> logger) : IHitlQueue
 {
@@ -17,10 +17,10 @@ public class PostgresHitlQueue(
 
     public async Task<Guid> EnqueueAsync(HitlCheckpoint checkpoint, CancellationToken ct = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.HitlCheckpoints.Add(checkpoint);
         await db.SaveChangesAsync(ct);
 
-        // Publish notification for real-time dashboard
         var pub = redis.GetSubscriber();
         await pub.PublishAsync(RedisChannel.Literal(PendingChannel), checkpoint.Id.ToString());
 
@@ -58,12 +58,14 @@ public class PostgresHitlQueue(
 
     public async Task<HitlCheckpoint?> GetPendingAsync(Guid checkpointId)
     {
+        await using var db = await dbFactory.CreateDbContextAsync();
         return await db.HitlCheckpoints
             .FirstOrDefaultAsync(h => h.Id == checkpointId && h.Status == CheckpointStatus.Pending);
     }
 
     public async Task<List<HitlCheckpoint>> GetPendingByFlowAsync(Guid flowRunId)
     {
+        await using var db = await dbFactory.CreateDbContextAsync();
         return await db.HitlCheckpoints
             .Where(h => h.FlowRunId == flowRunId && h.Status == CheckpointStatus.Pending)
             .OrderBy(h => h.CreatedAt)
@@ -72,6 +74,7 @@ public class PostgresHitlQueue(
 
     public async Task<List<HitlCheckpoint>> GetAllPendingAsync(int skip = 0, int take = 50)
     {
+        await using var db = await dbFactory.CreateDbContextAsync();
         return await db.HitlCheckpoints
             .Where(h => h.Status == CheckpointStatus.Pending)
             .OrderBy(h => h.ExpiresAt ?? DateTimeOffset.MaxValue)
@@ -83,7 +86,7 @@ public class PostgresHitlQueue(
 
     public async Task SubmitDecisionAsync(Guid checkpointId, HitlDecision decision)
     {
-        // Atomic check: only update if still Pending — prevents double-decision race condition
+        await using var db = await dbFactory.CreateDbContextAsync();
         var checkpoint = await db.HitlCheckpoints
             .FirstOrDefaultAsync(h => h.Id == checkpointId && h.Status == CheckpointStatus.Pending);
 
@@ -109,7 +112,6 @@ public class PostgresHitlQueue(
 
         await db.SaveChangesAsync();
 
-        // Notify waiting grain via Redis pub/sub
         var json = System.Text.Json.JsonSerializer.Serialize(decision);
         var pub = redis.GetSubscriber();
         await pub.PublishAsync(RedisChannel.Literal($"{DecisionPrefix}{checkpointId}"), json);
@@ -120,6 +122,7 @@ public class PostgresHitlQueue(
 
     public async Task EscalateAsync(Guid checkpointId, string reason)
     {
+        await using var db = await dbFactory.CreateDbContextAsync();
         var checkpoint = await db.HitlCheckpoints.FindAsync(checkpointId)
             ?? throw new KeyNotFoundException($"Checkpoint {checkpointId} not found");
 

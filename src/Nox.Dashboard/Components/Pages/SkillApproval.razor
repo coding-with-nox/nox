@@ -3,7 +3,7 @@
 @using Nox.Domain.Skills
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @inject ISkillRegistry SkillRegistry
 @inject IHttpContextAccessor HttpContextAccessor
 
@@ -101,7 +101,8 @@
 
     private async Task Reload()
     {
-        _skills = await Db.Skills.OrderBy(s => s.Scope).ThenBy(s => s.Slug).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _skills = await db.Skills.OrderBy(s => s.Scope).ThenBy(s => s.Slug).ToListAsync();
         _pendingSkills = _skills.Where(s => s.Status == SkillStatus.PendingApproval).ToList();
     }
 

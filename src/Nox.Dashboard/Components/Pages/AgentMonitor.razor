@@ -5,7 +5,7 @@
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
 @inject NavigationManager Navigation
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IConfiguration Configuration
 @implements IAsyncDisposable
 
@@ -90,6 +90,11 @@
     protected override async Task OnInitializedAsync()
     {
         await Refresh();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
 
         var apiBase = Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000";
         _hubConnection = new HubConnectionBuilder()
@@ -100,12 +105,14 @@
         _hubConnection.On<object>("AgentUpdated", _ =>
             InvokeAsync(async () => { await Refresh(); StateHasChanged(); }));
 
-        await _hubConnection.StartAsync();
+        try { await _hubConnection.StartAsync(); }
+        catch { /* hub is optional — page still works without real-time updates */ }
     }
 
     private async Task Refresh()
     {
-        var query = Db.Agents.AsQueryable();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = db.Agents.AsQueryable();
         if (Guid.TryParse(_filterRunId, out var runId))
             query = query.Where(a => a.FlowRunId == runId);
 

@@ -102,12 +102,6 @@ services:
       - "8080:8080"
     volumes:
       - ./keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
 
 volumes:
   postgres_data:

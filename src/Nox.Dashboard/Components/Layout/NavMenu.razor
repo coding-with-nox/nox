@@ -2,7 +2,7 @@
 @using Nox.Domain.Skills
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
-@inject NoxDbContext Db
+@inject IDbContextFactory<NoxDbContext> DbFactory
 @implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -88,8 +88,9 @@
     {
         try
         {
-            _pendingCheckpoints = await Db.HitlCheckpoints.CountAsync(h => h.Status == CheckpointStatus.Pending);
-            _pendingSkills = await Db.Skills.CountAsync(s => s.Status == SkillStatus.PendingApproval);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _pendingCheckpoints = await db.HitlCheckpoints.CountAsync(h => h.Status == CheckpointStatus.Pending);
+            _pendingSkills = await db.Skills.CountAsync(s => s.Status == SkillStatus.PendingApproval);
         }
         catch { /* DB might not be ready yet */ }
     }
