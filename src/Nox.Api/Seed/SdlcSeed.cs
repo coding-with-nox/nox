@@ -126,7 +126,17 @@ public static class SdlcSeed
         UpsertCmd(
             "docs",
             "Generate Documentation",
-            "Generate exhaustive technical documentation for the provided code: API, parameters, examples, architecture notes.",
+            "Generates exhaustive, developer-grade technical documentation for any code artifact: module, class, function, API endpoint, or service. " +
+            "The output is structured Markdown covering seven mandatory sections: " +
+            "(1) Overview — purpose, architectural layer, and system context; " +
+            "(2) Public API — full typed signatures, parameter descriptions with types and constraints, return value semantics, and all exceptions that can be thrown; " +
+            "(3) Data Models — every DTO, entity, and value object with field names, types, invariants, and validation rules; " +
+            "(4) Usage Examples — at least two realistic, copy-pasteable code samples showing the happy path and a non-trivial edge case; " +
+            "(5) Dependencies and Integration Points — external services, injected interfaces, configuration keys required; " +
+            "(6) Known Limitations and Edge Cases — non-obvious behaviour, thread-safety notes, performance hotspots, and gotchas a maintainer must know; " +
+            "(7) Changelog — breaking changes if version history is available. " +
+            "Output is always precise, factual, and free of padding. Code blocks use language-tagged fences. " +
+            "Ideal for onboarding new engineers, generating API references, or producing handoff documentation before a code review.",
             """
             You are a Senior Technical Writer with deep software engineering expertise.
             Your task is to generate exhaustive, developer-grade documentation for the code or component provided.
@@ -166,7 +176,14 @@ public static class SdlcSeed
         UpsertCmd(
             "code-review",
             "Code Review",
-            "Perform a thorough, senior-level code review covering correctness, security, performance, and maintainability.",
+            "Performs a formal, principal-engineer-level code review across five critical dimensions. " +
+            "Correctness: detects logic errors, null dereferences, off-by-one mistakes, race conditions, improper resource disposal, and incorrect error propagation. " +
+            "Security: flags injection vulnerabilities (SQL, command, XSS, SSTI), authentication and authorisation bypass risks, secrets in code or logs, insecure deserialization, path traversal, and SSRF. " +
+            "Performance: identifies N+1 query patterns, unnecessary allocations, synchronous I/O blocking async threads, missing caching for expensive idempotent operations, and algorithmic inefficiencies. " +
+            "Design and Maintainability: evaluates SOLID compliance, cohesion, coupling, naming clarity, magic numbers, code duplication, and excessive nesting. " +
+            "Test Coverage: checks for missing unit tests on critical paths, vacuous assertions, and gaps in edge-case and error-path coverage. " +
+            "Each issue is reported with severity (Critical / Major / Minor / Suggestion), location, problem description, and a concrete recommended fix with a code snippet. " +
+            "The review closes with a summary section containing an overall quality score from 1 to 10, the top three priorities, and a clear go/no-go recommendation for merge.",
             """
             You are a Principal Engineer conducting a formal code review. Your review must be thorough, constructive, and actionable. Evaluate the provided code across ALL of the following dimensions:
 
@@ -215,7 +232,16 @@ public static class SdlcSeed
         UpsertCmd(
             "summarize",
             "Summarize",
-            "Produce a structured, information-dense summary capturing decisions, risks, open questions, and action items.",
+            "Produces a structured, information-dense summary of any provided content: meeting notes, technical documents, code changelists, incident reports, or free-form text. " +
+            "The output is always organized into seven sections: " +
+            "Executive Summary (three to five sentences capturing the single most important takeaway for a decision-maker who will not read further); " +
+            "Key Decisions Made (each decision with its rationale and owner if known); " +
+            "Key Findings and Outcomes (concrete facts and measurements with numbers preserved exactly as written); " +
+            "Risks and Issues Identified (each risk rated by likelihood and impact — High, Medium, or Low — with any mitigations mentioned); " +
+            "Open Questions and Blockers (items requiring a decision before work can proceed, with owner if mentioned); " +
+            "Action Items (concrete next steps formatted as owner, action, and deadline); " +
+            "Context and Background (only when relevant information would otherwise be lost). " +
+            "Rules enforced: bullet points and headers only, no prose walls; technical terms preserved verbatim; code summarized by purpose rather than transcribed; contradictions flagged explicitly. Output in GitHub-flavored Markdown.",
             """
             You are a Senior Analyst skilled at distilling complex information into clear, structured summaries. Your task is to produce a concise yet information-dense summary of the provided content.
 
@@ -253,7 +279,15 @@ public static class SdlcSeed
         UpsertCmd(
             "test-plan",
             "Generate Test Plan",
-            "Generate a rigorous, executable test plan with unit, integration, and edge-case scenarios and clear acceptance criteria.",
+            "Generates a rigorous, executable test plan for any feature or component described in the input. " +
+            "The plan is structured into six parts: " +
+            "Feature Under Test (restates the scope in one paragraph, clarifying what is and is not covered); " +
+            "Test Strategy (applicable testing levels — unit, integration, contract, end-to-end — the isolation strategy explaining what to mock or stub and why, the test data management approach, and the minimum acceptable line and branch coverage target); " +
+            "Unit Test Cases (a table covering every public method with test ID, scenario, input, expected output, and edge cases — happy path, boundary values, null and empty inputs, type mismatches, and exception paths); " +
+            "Integration Test Cases (for each API endpoint, database query, or external service call — setup state, seed data, steps, and assertions on response codes, body shape, database state, and published events); " +
+            "Edge Cases and Non-Happy Paths (concurrent access, timeout and retry behaviour, partial failures, large payloads, empty collections, expired tokens); " +
+            "Acceptance Criteria (one Gherkin-style Given/When/Then scenario per key user story). " +
+            "The plan closes with a Definition of Done checklist a PR must satisfy before the test plan is considered fulfilled.",
             """
             You are a Senior QA Engineer and Test Architect. Generate a rigorous, executable test plan for the feature or component described. The plan must be detailed enough that a developer with no prior context can implement every test case.
 
@@ -295,7 +329,15 @@ public static class SdlcSeed
         UpsertCmd(
             "propose-skill",
             "Propose New Skill",
-            "Create a complete, well-justified skill proposal for HITL approval, covering slug, description, prompt template, scope, and rationale.",
+            "Creates a complete, well-justified skill proposal and submits it to the HITL approval queue for human review before the skill is added to the registry. " +
+            "The proposal is structured into six mandatory sections: " +
+            "Skill Identity (a globally unique kebab-case slug, a human-readable name in Title Case under forty characters, type — SlashCommand, McpTool, Prompt, or Workflow — scope — Global or Agent — and the logical groupId using existing groups where possible); " +
+            "Description (a single sentence under one hundred and twenty characters starting with a verb, shown in the UI skill list); " +
+            "Prompt Template (the full instruction text injected as a tool result when the skill is invoked — must be at least five hundred characters, structured with sections and bullet points, specific about expected output format, and free of ambiguity); " +
+            "Justification (the problem the skill solves, estimated frequency of use, potential risks such as data leakage or misuse, and alternatives considered); " +
+            "IsMandatory flag (whether the skill should be included in every agent toolset with explicit justification); " +
+            "Dependencies (any infrastructure, credentials, or external services required). " +
+            "Output is structured Markdown ready for a human approver to evaluate and approve or reject via the HITL checkpoint.",
             """
             You are a Platform Engineer responsible for extending the Nox agent skill registry. When asked to propose a new skill, produce a complete, structured proposal that gives the human approver everything they need to evaluate and approve it.
 

@@ -66,6 +66,7 @@
                 <th>@Loc["name"]</th>
                 <th>@Loc["type"]</th>
                 <th>@Loc["skills.scope"]</th>
+                <th>@Loc["skills.group"]</th>
                 <th>@Loc["status"]</th>
                 <th>@Loc["created"]</th>
                 <th></th>
@@ -79,6 +80,7 @@
                     <td>@skill.Name</td>
                     <td><span class="badge bg-secondary">@skill.Type</span></td>
                     <td><span class="badge bg-light text-dark">@skill.Scope</span></td>
+                    <td>@(skill.GroupId ?? "—")</td>
                     <td><span class="badge bg-@GetStatusColor(skill.Status)">@skill.Status</span></td>
                     <td>@skill.CreatedAt.ToString("dd/MM/yy")</td>
                     <td class="text-end text-nowrap">
@@ -155,7 +157,7 @@
 @if (_editingSkill is not null)
 {
     <div class="modal show d-block" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">@Loc["edit"]: @_editingSkill.Name</h5>
@@ -168,7 +170,14 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">@Loc["flows.desc"]</label>
-                        <textarea class="form-control" rows="2" @bind="_editDesc"></textarea>
+                        <textarea class="form-control font-monospace" rows="6" @bind="_editDesc"
+                                  style="resize:vertical; font-size:0.82rem;"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prompt Template</label>
+                        <textarea class="form-control font-monospace" rows="12" @bind="_editPromptTemplate"
+                                  placeholder="Prompt inviato all'LLM come risultato dello strumento…"
+                                  style="resize:vertical; font-size:0.82rem;"></textarea>
                     </div>
                     <div class="row mb-3">
                         <div class="col">
@@ -226,6 +235,7 @@
     private Skill? _editingSkill;
     private string _editName = string.Empty;
     private string _editDesc = string.Empty;
+    private string _editPromptTemplate = string.Empty;
     private string _editGroupId = string.Empty;
     private SkillType _editType = SkillType.SlashCommand;
     private SkillScope _editScope = SkillScope.Global;
@@ -290,6 +300,9 @@
         _editingSkill = skill;
         _editName = skill.Name;
         _editDesc = skill.Description ?? string.Empty;
+        _editPromptTemplate = skill.Definition.TryGetPropertyValue("promptTemplate", out var pt)
+            ? pt?.GetValue<string>() ?? string.Empty
+            : string.Empty;
         _editType = skill.Type;
         _editScope = skill.Scope;
         _editGroupId = skill.GroupId ?? string.Empty;
@@ -309,6 +322,14 @@
             existing.Scope = _editScope;
             existing.GroupId = string.IsNullOrWhiteSpace(_editGroupId) ? null : _editGroupId.Trim();
             existing.IsMandatory = _editIsMandatory;
+            // Preserve existing Definition keys; update only promptTemplate
+            var def = System.Text.Json.Nodes.JsonObject.Parse(existing.Definition.ToJsonString())!.AsObject();
+            if (!string.IsNullOrWhiteSpace(_editPromptTemplate))
+                def["promptTemplate"] = _editPromptTemplate;
+            else
+                def.Remove("promptTemplate");
+            existing.Definition = def;
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
         _editingSkill = null;
