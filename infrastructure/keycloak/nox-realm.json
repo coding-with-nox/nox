@@ -23,8 +23,8 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "nox-api-secret-change-me-in-production",
-      "directAccessGrantsEnabled": true,
+      "secret": "__KEYCLOAK_CLIENT_SECRET__",
+      "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "defaultClientScopes": ["openid", "profile", "email", "roles"]
@@ -35,8 +35,9 @@
       "description": "Blazor Server dashboard (public client)",
       "enabled": true,
       "publicClient": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "redirectUris": [
+        "http://localhost:5152/*",
         "http://localhost:5050/*",
         "https://localhost:5051/*"
       ],

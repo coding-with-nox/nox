@@ -1,3 +1,7 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nox.Dashboard.Components;
@@ -22,19 +26,71 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
-    // Persist Data Protection keys so antiforgery tokens survive container restarts
+    // ── Data Protection ────────────────────────────────────────────────
     builder.Services.AddDataProtection()
         .PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/dataprotection-keys"))
         .SetApplicationName("nox-dashboard");
 
-    // Add Razor components with interactive server rendering
+    // ── Authentication: Cookie + Keycloak OIDC ─────────────────────────
+    var publicAuthority   = builder.Configuration["Nox:Auth:PublicAuthority"]
+                            ?? "http://localhost:8080/realms/nox";
+    var internalAuthority = builder.Configuration["Nox:Auth:InternalAuthority"]
+                            ?? publicAuthority;
+
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme          = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie(options =>
+    {
+        options.Cookie.Name       = "nox.auth";
+        options.Cookie.HttpOnly   = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SameSite   = SameSiteMode.Lax;
+        options.ExpireTimeSpan    = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+    })
+    .AddOpenIdConnect(options =>
+    {
+        // Authority = public URL (browser redirects + token issuer validation)
+        options.Authority           = publicAuthority;
+        // MetadataAddress = internal Docker URL (avoids DNS issues in containers)
+        options.MetadataAddress     = internalAuthority + "/.well-known/openid-configuration";
+        options.ClientId            = "nox-dashboard";
+        options.ResponseType        = "code";
+        options.SaveTokens          = true;
+        options.GetClaimsFromUserInfoEndpoint = true;
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+
+        options.Scope.Clear();
+        options.Scope.Add("openid");
+        options.Scope.Add("profile");
+        options.Scope.Add("email");
+        options.Scope.Add("roles");
+
+        // Map Keycloak realm_access.roles → ClaimTypes.Role
+        options.ClaimActions.MapJsonSubKey(ClaimTypes.Role, "realm_access", "roles");
+
+        options.TokenValidationParameters = new()
+        {
+            NameClaimType = "preferred_username",
+            RoleClaimType = ClaimTypes.Role,
+            // Accept tokens issued by either the public or internal authority URL
+            ValidIssuers  = [publicAuthority, internalAuthority],
+        };
+    });
+
+    builder.Services.AddAuthorization();
+
+    // ── Razor components ───────────────────────────────────────────────
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 
-    // Infrastructure (read-only access to DB for dashboard)
+    // ── Infrastructure (read-only DB access) ──────────────────────────
     builder.Services.AddNoxInfrastructure(builder.Configuration);
 
-    // HTTP client for Nox.Api
+    // ── HTTP client to Nox.Api ─────────────────────────────────────────
     builder.Services.AddHttpClient("NoxApi", client =>
     {
         client.BaseAddress = new Uri(builder.Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000");
@@ -43,9 +99,7 @@ try
             client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
     });
 
-    // Flow engine (HTTP client to Nox.Api)
     builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
-
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddSignalR();
     builder.Services.AddScoped<ThemeService>();
@@ -55,13 +109,40 @@ try
 
     app.UseSerilogRequestLogging();
 
+    // ── HTTP Security Headers (F08) ───────────────────────────────────────────
+    app.Use(async (ctx, next) =>
+    {
+        ctx.Response.Headers["X-Frame-Options"]        = "DENY";
+        ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        ctx.Response.Headers["Referrer-Policy"]        = "strict-origin-when-cross-origin";
+        ctx.Response.Headers["Permissions-Policy"]     = "camera=(), microphone=(), geolocation=()";
+        await next();
+    });
+
     if (!app.Environment.IsDevelopment())
     {
         app.UseExceptionHandler("/Error", createScopeForErrors: true);
         app.UseHsts();
     }
 
+    app.UseAuthentication();
+    app.UseAuthorization();
     app.UseAntiforgery();
+
+    // ── Login endpoint — triggers OIDC challenge ───────────────────────
+    app.MapGet("/login", (HttpContext ctx, string? returnUrl) =>
+        ctx.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
+            new AuthenticationProperties { RedirectUri = returnUrl ?? "/" }))
+        .AllowAnonymous();
+
+    // ── Logout endpoint — clears cookie + ends Keycloak session ───────
+    app.MapGet("/logout", async (HttpContext ctx) =>
+    {
+        await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        await ctx.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme,
+            new AuthenticationProperties { RedirectUri = "/" });
+    }).RequireAuthorization();
+
     app.MapStaticAssets();
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
@@ -78,7 +159,7 @@ finally
     Log.CloseAndFlush();
 }
 
-// Dashboard uses HTTP to call Nox.Api for flow operations
+// ── Dashboard flow engine proxy ────────────────────────────────────────
 public class DashboardFlowEngineProxy(IHttpClientFactory http) : IFlowEngine
 {
     public async Task<FlowRun> StartAsync(Guid flowId, System.Text.Json.Nodes.JsonObject? variables = null, CancellationToken ct = default)

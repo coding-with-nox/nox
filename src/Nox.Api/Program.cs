@@ -140,6 +140,17 @@ try
     await Nox.Api.Seed.SdlcSeed.RunAsync(app.Services);
 
     app.UseSerilogRequestLogging();
+
+    // ── HTTP Security Headers (F08) ───────────────────────────────────────────
+    app.Use(async (ctx, next) =>
+    {
+        ctx.Response.Headers["X-Frame-Options"]        = "DENY";
+        ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        ctx.Response.Headers["Referrer-Policy"]        = "strict-origin-when-cross-origin";
+        ctx.Response.Headers["Permissions-Policy"]     = "camera=(), microphone=(), geolocation=()";
+        await next();
+    });
+
     app.UseCors();
     app.UseRateLimiter();
 

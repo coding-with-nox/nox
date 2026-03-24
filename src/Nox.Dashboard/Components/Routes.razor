@@ -1,6 +1,22 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+@inject NavigationManager Navigation
+
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @{
+                    var returnUrl = new Uri(Navigation.Uri).PathAndQuery;
+                    Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <div class="d-flex justify-content-center align-items-center" style="height:100vh">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Autenticazione…</span>
+                    </div>
+                </div>
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
