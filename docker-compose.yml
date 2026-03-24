@@ -86,18 +86,23 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
     container_name: nox-keycloak
-    entrypoint: ["/bin/sh", "-c", "mkdir -p /opt/keycloak/data/import && sed 's/__KEYCLOAK_CLIENT_SECRET__/'\"$$KEYCLOAK_CLIENT_SECRET\"'/g' /opt/keycloak/scripts/nox-realm-template.json > /opt/keycloak/data/import/nox-realm.json && exec /opt/keycloak/bin/kc.sh start-dev --import-realm"]
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KC_HOSTNAME: localhost
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
     ports:
       - "8080:8080"
     volumes:
-      - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/scripts/nox-realm-template.json:ro
+      - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/realms/master || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
 
   # ── Applications ──────────────────────────────────────────────────────────────
 
@@ -130,7 +135,7 @@ services:
       redis:
         condition: service_healthy
       keycloak:
-        condition: service_started
+        condition: service_healthy
 
   dashboard:
     build:
@@ -155,8 +160,10 @@ services:
     volumes:
       - dashboard_dp_keys:/app/dataprotection-keys
     depends_on:
-      - api
-      - keycloak
+      api:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
 
 volumes:
   postgres_data:

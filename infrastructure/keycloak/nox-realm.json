@@ -23,7 +23,7 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "__KEYCLOAK_CLIENT_SECRET__",
+      "secret": "rotate-me-via-keycloak-admin-ui",
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
