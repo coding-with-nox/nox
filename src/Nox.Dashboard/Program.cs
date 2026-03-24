@@ -8,52 +8,75 @@ using Nox.Domain.Hitl;
 using Nox.Domain.Skills;
 using Nox.Infrastructure;
 using Nox.Infrastructure.Persistence;
+using Serilog;
+using Serilog.Events;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .WriteTo.Console()
+    .CreateLogger();
 
-// Persist Data Protection keys so antiforgery tokens survive container restarts
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/dataprotection-keys"))
-    .SetApplicationName("nox-dashboard");
-
-// Add Razor components with interactive server rendering
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
-// Infrastructure (read-only access to DB for dashboard)
-builder.Services.AddNoxInfrastructure(builder.Configuration);
-
-// HTTP client for Nox.Api
-builder.Services.AddHttpClient("NoxApi", client =>
+try
 {
-    client.BaseAddress = new Uri(builder.Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000");
-    var apiKey = builder.Configuration["Nox:InternalApiKey"];
-    if (!string.IsNullOrEmpty(apiKey))
-        client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-});
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog();
 
-// Flow engine (HTTP client to Nox.Api)
-builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
+    // Persist Data Protection keys so antiforgery tokens survive container restarts
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/dataprotection-keys"))
+        .SetApplicationName("nox-dashboard");
 
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddSignalR();
-builder.Services.AddScoped<ThemeService>();
-builder.Services.AddScoped<LanguageService>();
+    // Add Razor components with interactive server rendering
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
 
-var app = builder.Build();
+    // Infrastructure (read-only access to DB for dashboard)
+    builder.Services.AddNoxInfrastructure(builder.Configuration);
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
+    // HTTP client for Nox.Api
+    builder.Services.AddHttpClient("NoxApi", client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000");
+        var apiKey = builder.Configuration["Nox:InternalApiKey"];
+        if (!string.IsNullOrEmpty(apiKey))
+            client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+    });
+
+    // Flow engine (HTTP client to Nox.Api)
+    builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
+
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddSignalR();
+    builder.Services.AddScoped<ThemeService>();
+    builder.Services.AddScoped<LanguageService>();
+
+    var app = builder.Build();
+
+    app.UseSerilogRequestLogging();
+
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        app.UseHsts();
+    }
+
+    app.UseAntiforgery();
+    app.MapStaticAssets();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    app.Run();
 }
-
-app.UseAntiforgery();
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.Run();
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Nox Dashboard failed to start");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 // Dashboard uses HTTP to call Nox.Api for flow operations
 public class DashboardFlowEngineProxy(IHttpClientFactory http) : IFlowEngine

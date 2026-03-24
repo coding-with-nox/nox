@@ -1,0 +1,143 @@
+@page "/about"
+@inherits NoxPageBase
+
+<PageTitle>@Loc["nav.about"] - Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+        <div>
+            <h2 class="mb-0">About Nox</h2>
+            <small class="text-muted">@Loc["about.subtitle"]</small>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm"
+           href="https://docs.docker.com/compose/"
+           target="_blank"
+           rel="noopener noreferrer">@Loc["about.compose_docs"]</a>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body py-2 d-flex gap-4 flex-wrap">
+            <span class="small text-muted">@Loc["about.platforms"]: <strong>@Platforms.Count</strong></span>
+            <span class="small text-muted">@Loc["about.compose_sources"]: <code>docker-compose.yml</code>, <code>infrastructure/docker-compose.yml</code></span>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        @foreach (var platform in Platforms)
+        {
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong>@platform.Name</strong>
+                        <span class="badge bg-light">@platform.ComposeService</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-3">@(Loc.Lang == "it" ? platform.DescriptionIt : platform.DescriptionEn)</p>
+
+                        <div class="small mb-2">
+                            <span class="text-muted">@Loc["about.role"]:</span>
+                            <strong>@(Loc.Lang == "it" ? platform.RoleIt : platform.RoleEn)</strong>
+                        </div>
+
+                        <div class="small mb-3">
+                            <span class="text-muted">@Loc["about.ports"]:</span>
+                            <code>@platform.Ports</code>
+                        </div>
+
+                        <div class="d-flex gap-2 flex-wrap">
+                            <a class="btn btn-outline-primary btn-sm"
+                               href="@platform.OfficialUrl"
+                               target="_blank"
+                               rel="noopener noreferrer">@Loc["about.official_site"]</a>
+
+                            @if (!string.IsNullOrWhiteSpace(platform.LocalUrl))
+                            {
+                                <a class="btn btn-outline-secondary btn-sm"
+                                   href="@platform.LocalUrl"
+                                   target="_blank"
+                                   rel="noopener noreferrer">@Loc["about.local_access"]</a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<PlatformLink> Platforms =
+    [
+        new(
+            "PostgreSQL",
+            "postgres",
+            "Database relazionale principale dell'applicazione.",
+            "Primary relational database for the application.",
+            "Persistenza applicativa",
+            "Application persistence",
+            "5432",
+            "https://www.postgresql.org/",
+            null),
+        new(
+            "PostgreSQL",
+            "postgres-orleans",
+            "Store ADO.NET dedicato al cluster Orleans.",
+            "Dedicated ADO.NET store for the Orleans cluster.",
+            "Clustering e grain storage",
+            "Clustering and grain storage",
+            "5433",
+            "https://www.postgresql.org/",
+            null),
+        new(
+            "Redis",
+            "redis",
+            "Backplane/eventing leggero e reminder service di Orleans.",
+            "Lightweight backplane/eventing and Orleans reminder service.",
+            "Cache e reminder",
+            "Cache and reminders",
+            "6379",
+            "https://redis.io/",
+            null),
+        new(
+            "Qdrant",
+            "qdrant",
+            "Vector database usato per memory ed embeddings.",
+            "Vector database used for memory and embeddings.",
+            "Vector store",
+            "Vector store",
+            "6333, 6334",
+            "https://qdrant.tech/",
+            "http://localhost:6333"),
+        new(
+            "Seq",
+            "seq",
+            "Raccolta e consultazione centralizzata dei log applicativi.",
+            "Centralized collection and browsing of application logs.",
+            "Log aggregation",
+            "Log aggregation",
+            "5341, 8081",
+            "https://datalust.co/seq",
+            "http://localhost:8081"),
+        new(
+            "Keycloak",
+            "keycloak",
+            "Identity provider per autenticazione e federazione OIDC.",
+            "Identity provider for authentication and OIDC federation.",
+            "Identity and access management",
+            "Identity and access management",
+            "8080",
+            "https://www.keycloak.org/",
+            "http://localhost:8080")
+    ];
+
+    private sealed record PlatformLink(
+        string Name,
+        string ComposeService,
+        string DescriptionIt,
+        string DescriptionEn,
+        string RoleIt,
+        string RoleEn,
+        string Ports,
+        string OfficialUrl,
+        string? LocalUrl);
+}
