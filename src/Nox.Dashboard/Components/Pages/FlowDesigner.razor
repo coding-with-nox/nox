@@ -4,118 +4,372 @@
 @using Nox.Domain.Agents
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
+@using System.Text.Json.Nodes
 @inherits NoxPageBase
+@implements IAsyncDisposable
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IFlowEngine FlowEngine
-@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
-<PageTitle>@Loc["flows.title"] — Nox</PageTitle>
+<PageTitle>@(_designing is not null ? _designing.Name : @Loc["flows.title"]) — Nox</PageTitle>
 
-<div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>⇄ @Loc["flows.title"]</h2>
-        <button class="btn btn-primary" @onclick="() => _showCreateModal = true">@Loc["flows.new"]</button>
-    </div>
+<style>
+.fd-wrap   { display:flex; flex-direction:column; height:calc(100vh - 56px); overflow:hidden; }
+.fd-header { height:52px; display:flex; align-items:center; gap:.5rem; padding:0 .75rem;
+             background:#fff; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
+.fd-body   { flex:1; display:flex; overflow:hidden; }
+.fd-palette{ width:152px; background:#f8fafc; border-right:1px solid #e2e8f0;
+             padding:.5rem .4rem; overflow-y:auto; flex-shrink:0; }
+.fd-canvas { flex:1; overflow:hidden; position:relative; background:#f1f5f9; cursor:default; }
+.fd-props  { width:264px; background:#fff; border-left:1px solid #e2e8f0;
+             padding:.75rem; overflow-y:auto; flex-shrink:0; }
+.fd-canvas svg { width:100%; height:100%; display:block; }
+.pal-btn   { display:flex; align-items:center; gap:.4rem; width:100%; padding:.38rem .5rem;
+             margin-bottom:.3rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff;
+             cursor:pointer; font-size:.78rem; font-weight:500; color:#334155; transition:all .15s; }
+.pal-btn:hover { background:#f0f9ff; border-color:#93c5fd; }
+.pal-dot   { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+.pal-sep   { height:1px; background:#e2e8f0; margin:.4rem 0; }
+.pal-section { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase;
+               letter-spacing:.05em; margin:.4rem 0 .25rem; padding:0 .2rem; }
+.connect-active { background:#eff6ff !important; border-color:#3b82f6 !important; color:#1d4ed8 !important; }
+.prop-label { font-size:.75rem; font-weight:600; color:#64748b; margin-bottom:.2rem; }
+.prop-val   { font-size:.82rem; }
+/* CSS-driven selection — JS sets data-selected, no Blazor re-render needed */
+#flow-svg [data-nid][data-selected="true"] { filter: drop-shadow(0 0 6px #6366f1aa); }
+#flow-svg [data-nid][data-selected="true"] .node-shape { stroke: #6366f1; stroke-width: 3; }
+#flow-svg [data-eid][data-selected="true"] path:nth-child(2) { stroke: #6366f1; stroke-width: 3; marker-end: url(#arrow-sel); }
+</style>
 
-    @if (!string.IsNullOrEmpty(_runError))
-    {
-        <div class="alert alert-danger d-flex justify-content-between align-items-center">
-            <span>@_runError</span>
-            <button class="btn-close btn-sm" @onclick="() => _runError = string.Empty"></button>
+@if (_designing is null)
+{
+    <!-- ── LIST VIEW ─────────────────────────────────────────────────── -->
+    <div class="container-fluid py-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>⇄ @Loc["flows.title"]</h2>
+            <button class="btn btn-primary btn-sm" @onclick="() => _showCreateModal = true">@Loc["flows.new"]</button>
         </div>
-    }
 
-    @if (_flows.Count == 0)
-    {
-        <div class="alert alert-secondary">@Loc["flows.no_flows"]</div>
-    }
-    else
-    {
-        <div class="row g-3">
-            @foreach (var flow in _flows)
-            {
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between">
-                            <strong>@flow.Name</strong>
-                            <span class="badge bg-@GetFlowStatusColor(flow.Status)">@flow.Status</span>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted small">@flow.Description</p>
-                            <div class="small">
-                                <span class="me-3">🗂 @flow.Graph.Nodes.Count @Loc["flows.nodes"]</span>
-                                <span>🔗 @flow.Graph.Edges.Count @Loc["flows.edges"]</span>
+        @if (!string.IsNullOrEmpty(_runError))
+        {
+            <div class="alert alert-danger d-flex justify-content-between align-items-center">
+                <span>@_runError</span>
+                <button class="btn-close btn-sm" @onclick="() => _runError = string.Empty"></button>
+            </div>
+        }
+
+        @if (_flows.Count == 0)
+        {
+            <div class="alert alert-secondary">@Loc["flows.no_flows"]</div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var flow in _flows)
+                {
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <strong>@flow.Name</strong>
+                                <span class="badge bg-@GetFlowColor(flow.Status)">@flow.Status</span>
                             </div>
-                            <div class="small text-muted mt-1">v@flow.Version · Updated @flow.UpdatedAt.ToString("dd/MM HH:mm")</div>
-                        </div>
-                        <div class="card-footer d-flex gap-2">
-                            <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewFlow(flow)">@Loc["flows.view"]</button>
-                            <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">@Loc["flows.run"]</button>
-                            <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditFlow(flow)">@Loc["edit"]</button>
+                            <div class="card-body">
+                                <p class="text-muted small mb-2">@flow.Description</p>
+                                <div class="small text-muted">
+                                    <span class="me-3">🗂 @flow.Graph.Nodes.Count nodi</span>
+                                    <span>🔗 @flow.Graph.Edges.Count archi</span>
+                                </div>
+                                <div class="small text-muted mt-1">v@flow.Version · @flow.UpdatedAt.ToString("dd/MM HH:mm")</div>
+                            </div>
+                            <div class="card-footer d-flex gap-2 flex-wrap">
+                                <button class="btn btn-outline-primary btn-sm" @onclick="() => OpenDesigner(flow)">✏ Design</button>
+                                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">▶ Avvia</button>
+                                <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditMeta(flow)">@Loc["edit"]</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            }
-        </div>
-    }
+                }
+            </div>
+        }
 
-    @if (_selectedFlow is not null)
-    {
-        <div class="mt-4">
-            <h4>Flow: @_selectedFlow.Name</h4>
-            <div class="card">
-                <div class="card-body" style="overflow-x: auto;">
-                    <!-- Simple text-based graph visualization -->
-                    <table class="table table-sm">
-                        <thead><tr><th>@Loc["flows.node"]</th><th>@Loc["type"]</th><th>@Loc["flows.outgoing"]</th></tr></thead>
-                        <tbody>
-                            @foreach (var node in _selectedFlow.Graph.Nodes)
-                            {
-                                <tr>
-                                    <td><code>@node.Id</code> — @node.Label</td>
-                                    <td><span class="badge bg-secondary">@node.NodeType</span></td>
-                                    <td>
-                                        @foreach (var edge in _selectedFlow.Graph.GetOutgoingEdges(node.Id))
-                                        {
-                                            <span class="badge bg-light text-dark me-1">
-                                                → @edge.ToNodeId
-                                                @if (edge.Condition is not null)
-                                                {
-                                                    <span class="text-muted"> [@edge.Condition]</span>
-                                                }
-                                            </span>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+        @if (_runs.Count > 0)
+        {
+            <h4 class="mt-4">@Loc["flows.recent"]</h4>
+            <table class="table table-sm table-hover">
+                <thead><tr><th>ID</th><th>Flow</th><th>Stato</th><th>Avviato</th><th>Completato</th></tr></thead>
+                <tbody>
+                    @foreach (var run in _runs.Take(20))
+                    {
+                        <tr>
+                            <td><code class="small">@run.Id.ToString()[..8]…</code></td>
+                            <td>@(_flows.FirstOrDefault(f => f.Id == run.FlowId)?.Name ?? "—")</td>
+                            <td><span class="badge bg-@GetRunColor(run.Status)">@run.Status</span></td>
+                            <td>@run.StartedAt.ToString("dd/MM HH:mm")</td>
+                            <td>@(run.CompletedAt?.ToString("HH:mm:ss") ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+else
+{
+    <!-- ── DESIGNER VIEW ──────────────────────────────────────────────── -->
+    <div class="fd-wrap">
+        <!-- Header bar -->
+        <div class="fd-header">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CloseDesigner">← Back</button>
+            <strong class="me-1" style="font-size:.95rem;">@_designing.Name</strong>
+            @if (_isDirty)
+            {
+                <span class="badge bg-warning text-dark">● non salvato</span>
+            }
+            else
+            {
+                <span class="badge bg-success">✓ salvato</span>
+            }
+            <div class="ms-auto d-flex gap-2 align-items-center">
+                @if (_connectMode)
+                {
+                    <span class="badge bg-primary">
+                        🔗 @(_connectFromId is null ? "Click nodo sorgente…" : "Click nodo destinazione…")
+                    </span>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="CancelConnect">✕ Annulla</button>
+                }
+                <button class="btn btn-outline-secondary btn-sm" @onclick="Undo"
+                        disabled="@(_undoStack.Count == 0)" title="Annulla (Ctrl+Z)">↩</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="Redo"
+                        disabled="@(_redoStack.Count == 0)" title="Ripeti (Ctrl+Y)">↪</button>
+                <button class="btn btn-primary btn-sm" @onclick="SaveGraph" disabled="@(!_isDirty)">💾 Salva</button>
+                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(_designing.Id)">▶ Avvia</button>
             </div>
         </div>
-    }
 
-    @if (_runs.Count > 0)
-    {
-        <h4 class="mt-4">@Loc["flows.recent"]</h4>
-        <table class="table table-sm">
-            <thead><tr><th>@Loc["flows.run_id"]</th><th>@Loc["home.flow"]</th><th>@Loc["status"]</th><th>@Loc["flows.started"]</th><th>@Loc["flows.completed"]</th></tr></thead>
-            <tbody>
-                @foreach (var run in _runs.Take(20))
+        <div class="fd-body">
+            <!-- Left palette -->
+            <div class="fd-palette">
+                <div class="pal-section">Nodi</div>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.Start)'>
+                    <span class="pal-dot" style="background:#22c55e;"></span> Start
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.AgentTask)'>
+                    <span class="pal-dot" style="background:#3b82f6;"></span> Agent Task
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.HitlCheckpoint)'>
+                    <span class="pal-dot" style="background:#f59e0b;"></span> HITL
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.Decision)'>
+                    <span class="pal-dot" style="background:#8b5cf6; border-radius:3px; transform:rotate(45deg);"></span> Decision
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.Fork)'>
+                    <span class="pal-dot" style="background:#64748b; border-radius:2px;"></span> Fork
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.Join)'>
+                    <span class="pal-dot" style="background:#475569; border-radius:2px;"></span> Join
+                </button>
+                <button class="pal-btn" @onclick='() => AddNode(NodeType.End)'>
+                    <span class="pal-dot" style="background:#ef4444;"></span> End
+                </button>
+
+                <div class="pal-sep"></div>
+                <div class="pal-section">Azioni</div>
+
+                <button class="pal-btn @(_connectMode ? "connect-active" : "")"
+                        @onclick="ToggleConnect">
+                    🔗 Collega
+                </button>
+
+                @if (_selectedNodeId is not null || _selectedEdgeId is not null)
                 {
-                    <tr>
-                        <td><code>@run.Id.ToString()[..8]…</code></td>
-                        <td>@(_flows.FirstOrDefault(f => f.Id == run.FlowId)?.Name ?? run.FlowId.ToString())</td>
-                        <td><span class="badge bg-@GetRunStatusColor(run.Status)">@run.Status</span></td>
-                        <td>@run.StartedAt.ToString("dd/MM HH:mm")</td>
-                        <td>@(run.CompletedAt?.ToString("HH:mm:ss") ?? "—")</td>
-                    </tr>
+                    <button class="pal-btn" style="color:#ef4444;border-color:#fecaca;"
+                            @onclick="DeleteSelected">
+                        🗑 Elimina
+                    </button>
                 }
-            </tbody>
-        </table>
-    }
-</div>
 
+                <div class="pal-sep"></div>
+                <button class="pal-btn" @onclick="FitView">⊡ Fit View</button>
+            </div>
+
+            <!-- SVG canvas -->
+            <div class="fd-canvas" style="@(_connectMode ? "cursor:crosshair;" : "")">
+                <svg id="flow-svg" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+                            <circle cx="1" cy="1" r="1.5" fill="#cbd5e1" opacity="0.6"/>
+                        </pattern>
+                        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                            <polygon points="0 0,8 3,0 6" fill="#94a3b8"/>
+                        </marker>
+                        <marker id="arrow-sel" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                            <polygon points="0 0,8 3,0 6" fill="#6366f1"/>
+                        </marker>
+                        <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000022"/>
+                        </filter>
+                    </defs>
+
+                    <!-- dot-grid background (outside canvas-root so it stays fixed) -->
+                    <rect width="100%" height="100%" fill="url(#dots)"/>
+
+                    <g id="cnv">
+                        <!-- Edges (rendered below nodes) -->
+                        @foreach (var e in _wEdges)
+                        {
+                            var d = EdgePath(e);
+                            <g data-eid="@e.Id" data-from="@e.From" data-to="@e.To" style="cursor:pointer">
+                                <path d="@d" stroke="transparent" stroke-width="18" fill="none"/>
+                                <path d="@d" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                                @if (!string.IsNullOrEmpty(e.Condition))
+                                {
+                                    var m = EdgeMid(e);
+                                    @RenderEdgeLabel(e.Condition, m.x, m.y - 7)
+                                }
+                            </g>
+                        }
+
+                        <!-- Nodes -->
+                        @foreach (var n in _wNodes)
+                        {
+                            @RenderNode(n)
+                        }
+                    </g>
+                </svg>
+            </div>
+
+            <!-- Right properties panel -->
+            <div class="fd-props">
+                @{
+                    var selNode = _selectedNodeId is not null
+                        ? _wNodes.FirstOrDefault(n => n.Id == _selectedNodeId)
+                        : null;
+                    var selEdge = _selectedEdgeId is not null
+                        ? _wEdges.FirstOrDefault(e => e.Id == _selectedEdgeId)
+                        : null;
+                    var _kMaxSub  = "maxSubAgents";
+                    var _kCpType  = "checkpointType";
+                    var _kTitle   = "title";
+                    var _kDesc    = "description";
+                    var _kExpires = "expiresInHours";
+                }
+
+                @if (selNode is not null)
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong style="font-size:.85rem;">@NodeTypeLabel(selNode.Type)</strong>
+                        <span class="badge" style="background:@NodeColor(selNode.Type)">@selNode.Type</span>
+                    </div>
+
+                    <div class="mb-2">
+                        <div class="prop-label">Label</div>
+                        <input class="form-control form-control-sm" value="@selNode.Label"
+                               @oninput="e => { selNode.Label = e.Value?.ToString() ?? string.Empty; _isDirty = true; }" />
+                    </div>
+
+                    @if (selNode.Type == NodeType.AgentTask)
+                    {
+                        <div class="mb-2">
+                            <div class="prop-label">Agent Template</div>
+                            <select class="form-select form-select-sm"
+                                    value="@(selNode.TemplateId?.ToString() ?? "")"
+                                    @onchange="e => { selNode.TemplateId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : Guid.Parse(e.Value!.ToString()!); _isDirty = true; }">
+                                <option value="">— nessuno —</option>
+                                @foreach (var t in _templates)
+                                {
+                                    <option value="@t.Id">@t.Name (@t.Role)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <div class="prop-label">Max Sub-Agents</div>
+                            <input type="number" class="form-control form-control-sm" min="1" max="20"
+                                   value="@CfgInt(selNode, _kMaxSub, 3)"
+                                   @oninput="e => { SetCfgInt(selNode, _kMaxSub, e.Value?.ToString()); }" />
+                        </div>
+                    }
+
+                    @if (selNode.Type == NodeType.HitlCheckpoint)
+                    {
+                        <div class="mb-2">
+                            <div class="prop-label">Tipo Checkpoint</div>
+                            <select class="form-select form-select-sm"
+                                    value="@CfgStr(selNode, _kCpType, "Approval")"
+                                    @onchange="e => { SetCfgStr(selNode, _kCpType, e.Value?.ToString()); }">
+                                @foreach (var ct in Enum.GetValues<CheckpointType>())
+                                {
+                                    <option value="@ct">@ct</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <div class="prop-label">Titolo</div>
+                            <input class="form-control form-control-sm"
+                                   value="@CfgStr(selNode, _kTitle)"
+                                   @oninput="e => SetCfgStr(selNode, _kTitle, e.Value?.ToString())" />
+                        </div>
+                        <div class="mb-2">
+                            <div class="prop-label">Descrizione</div>
+                            <textarea class="form-control form-control-sm" rows="3"
+                                      value="@CfgStr(selNode, _kDesc)"
+                                      @oninput="e => SetCfgStr(selNode, _kDesc, e.Value?.ToString())"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <div class="prop-label">Scadenza (ore)</div>
+                            <input type="number" class="form-control form-control-sm" min="1"
+                                   value="@CfgInt(selNode, _kExpires, 24)"
+                                   @oninput="e => SetCfgInt(selNode, _kExpires, e.Value?.ToString())" />
+                        </div>
+                    }
+
+                    <div class="mt-3">
+                        <button class="btn btn-danger btn-sm w-100"
+                                @onclick="DeleteSelected">🗑 Elimina nodo</button>
+                    </div>
+                }
+                else if (selEdge is not null)
+                {
+                    var fromN = _wNodes.FirstOrDefault(n => n.Id == selEdge.From);
+                    var toN   = _wNodes.FirstOrDefault(n => n.Id == selEdge.To);
+                    <div class="mb-2">
+                        <strong style="font-size:.85rem;">Arco</strong>
+                    </div>
+                    <div class="mb-2 small text-muted">
+                        <code>@(fromN?.Label ?? selEdge.From)</code>
+                        → <code>@(toN?.Label ?? selEdge.To)</code>
+                    </div>
+                    <div class="mb-2">
+                        <div class="prop-label">Condizione <span class="text-muted small">(opzionale)</span></div>
+                        <input class="form-control form-control-sm font-monospace"
+                               placeholder="es. decision == 'Approved'"
+                               value="@(selEdge.Condition ?? "")"
+                               @oninput="e => { selEdge.Condition = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); _isDirty = true; }" />
+                        <div class="form-text small">Lascia vuoto = sempre percorribile</div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-danger btn-sm w-100"
+                                @onclick="DeleteSelected">🗑 Elimina arco</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small text-center mt-4" style="line-height:1.6">
+                        <div style="font-size:1.8rem;margin-bottom:.5rem">↖</div>
+                        Click su un nodo o arco<br/>per modificarne le proprietà.
+                        <div class="mt-3 small text-start" style="background:#f8fafc;border-radius:8px;padding:.6rem .7rem">
+                            <div><strong>Drag</strong> — sposta nodi</div>
+                            <div><strong>Scroll</strong> — zoom</div>
+                            <div><strong>Drag canvas</strong> — pan</div>
+                            <div><strong>🔗 Collega</strong> — crea archi</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── CREATE FLOW MODAL ──────────────────────────────────────────── -->
 @if (_showCreateModal)
 {
     <div class="modal show d-block" tabindex="-1">
@@ -128,22 +382,11 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">@Loc["name"] *</label>
-                        <input class="form-control" @bind="_newFlowName" placeholder="es. Analisi Codice Backend" />
+                        <input class="form-control" @bind="_newFlowName" placeholder="es. SDLC Automation" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label">@Loc["flows.desc"]</label>
                         <textarea class="form-control" rows="2" @bind="_newFlowDesc"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">@Loc["flows.template_agent"]</label>
-                        <select class="form-select" @bind="_newFlowTemplateId">
-                            <option value="@Guid.Empty">— @Loc["flows.no_template"] —</option>
-                            @foreach (var t in _templates)
-                            {
-                                <option value="@t.Id">@t.Name (@t.Role)</option>
-                            }
-                        </select>
-                        <div class="form-text">@Loc["flows.template_hint"]</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -156,27 +399,28 @@
     <div class="modal-backdrop show"></div>
 }
 
-@if (_editingFlow is not null)
+<!-- ── EDIT META MODAL ──────────────────────────────────────────────── -->
+@if (_editingMeta is not null)
 {
     <div class="modal show d-block" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">@Loc["edit"]: @_editingFlow.Name</h5>
-                    <button class="btn-close" @onclick="() => _editingFlow = null"></button>
+                    <h5 class="modal-title">@Loc["edit"]: @_editingMeta.Name</h5>
+                    <button class="btn-close" @onclick="() => _editingMeta = null"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">@Loc["name"] *</label>
-                        <input class="form-control" @bind="_editFlowName" />
+                        <input class="form-control" @bind="_editMetaName" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label">@Loc["flows.desc"]</label>
-                        <textarea class="form-control" rows="2" @bind="_editFlowDesc"></textarea>
+                        <textarea class="form-control" rows="2" @bind="_editMetaDesc"></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">@Loc["status"]</label>
-                        <select class="form-select" @bind="_editFlowStatus">
+                        <select class="form-select" @bind="_editMetaStatus">
                             @foreach (var s in Enum.GetValues<FlowStatus>())
                             {
                                 <option value="@s">@s</option>
@@ -185,8 +429,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => _editingFlow = null">@Loc["cancel"]</button>
-                    <button class="btn btn-primary" @onclick="SaveEditFlow">@Loc["save"]</button>
+                    <button class="btn btn-secondary" @onclick="() => _editingMeta = null">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="SaveMeta">@Loc["save"]</button>
                 </div>
             </div>
         </div>
@@ -194,6 +438,7 @@
     <div class="modal-backdrop show"></div>
 }
 
+<!-- ── RUN MODAL ─────────────────────────────────────────────────────── -->
 @if (_showRunModal)
 {
     <div class="modal show d-block" tabindex="-1">
@@ -206,47 +451,42 @@
                 <div class="modal-body">
                     <div class="alert alert-info small mb-3">
                         Le variabili GitHub vengono passate come contesto a tutti gli agenti del flow.
-                        Il PAT non viene loggato ma è visibile in chiaro nel database.
                     </div>
-
                     <h6 class="fw-semibold mb-2">Configurazione GitHub</h6>
                     <div class="row mb-3">
                         <div class="col">
                             <label class="form-label">Repository <span class="text-muted small">(owner/repo)</span></label>
-                            <input class="form-control" @bind="_runGithubRepo" placeholder="es. myorg/my-project" />
+                            <input class="form-control" @bind="_runRepo" placeholder="es. myorg/my-project" />
                         </div>
                         <div class="col">
                             <label class="form-label">Personal Access Token</label>
-                            <input type="password" class="form-control" @bind="_runGithubPat" placeholder="ghp_..." />
+                            <input type="password" class="form-control" @bind="_runPat" placeholder="ghp_…" />
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col">
                             <label class="form-label">Branch di lavoro</label>
-                            <input class="form-control" @bind="_runGithubBranch" placeholder="es. ai/feature-123" />
-                            <div class="form-text">Il branch verrà creato dagli agenti se non esiste.</div>
+                            <input class="form-control" @bind="_runBranch" placeholder="es. ai/feature-123" />
                         </div>
                         <div class="col">
                             <label class="form-label">Branch base</label>
-                            <input class="form-control" @bind="_runGithubBaseBranch" placeholder="main" />
+                            <input class="form-control" @bind="_runBaseBranch" placeholder="main" />
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Numero Issue GitHub <span class="text-muted small">(opzionale)</span></label>
-                        <input type="number" class="form-control w-auto" @bind="_runGithubIssueNumber"
+                        <input type="number" class="form-control w-auto" @bind="_runIssue"
                                @bind:after="AutoFillBranch" min="1" placeholder="42" />
                     </div>
-
-                    <details class="mt-3">
+                    <details class="mt-2">
                         <summary class="small text-muted">Variabili aggiuntive (JSON)</summary>
                         <textarea class="form-control font-monospace mt-2" rows="3"
-                                  @bind="_runExtraVariables"
-                                  placeholder="{&quot;my_key&quot;: &quot;my_value&quot;}"></textarea>
+                                  @bind="_runExtra" placeholder="{&quot;key&quot;: &quot;value&quot;}"></textarea>
                     </details>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="() => _showRunModal = false">@Loc["cancel"]</button>
-                    <button class="btn btn-success" @onclick="ConfirmStartFlow">▶ Avvia</button>
+                    <button class="btn btn-success" @onclick="ConfirmRun">▶ Avvia</button>
                 </div>
             </div>
         </div>
@@ -255,191 +495,558 @@
 }
 
 @code {
+    // ── Domain data ────────────────────────────────────────────────────
     private List<Flow> _flows = [];
     private List<FlowRun> _runs = [];
     private List<AgentTemplate> _templates = [];
-    private Flow? _selectedFlow;
+    private string _runError = string.Empty;
+
+    // ── List view ──────────────────────────────────────────────────────
     private bool _showCreateModal;
     private string _newFlowName = string.Empty;
     private string _newFlowDesc = string.Empty;
-    private Guid _newFlowTemplateId = Guid.Empty;
-    private string _runError = string.Empty;
 
-    // Run modal state
+    // ── Edit meta modal ────────────────────────────────────────────────
+    private Flow? _editingMeta;
+    private string _editMetaName = string.Empty;
+    private string _editMetaDesc = string.Empty;
+    private FlowStatus _editMetaStatus;
+
+    // ── Run modal ──────────────────────────────────────────────────────
     private bool _showRunModal;
-    private Guid _pendingRunFlowId;
-    private string _runGithubRepo        = string.Empty;
-    private string _runGithubPat         = string.Empty;
-    private string _runGithubBranch      = string.Empty;
-    private string _runGithubBaseBranch  = "main";
-    private int?   _runGithubIssueNumber;
-    private string _runExtraVariables    = string.Empty;
+    private Guid _pendingRunId;
+    private string _runRepo = string.Empty, _runPat = string.Empty;
+    private string _runBranch = string.Empty, _runBaseBranch = "main";
+    private int? _runIssue;
+    private string _runExtra = string.Empty;
 
-    // Edit state
-    private Flow? _editingFlow;
-    private string _editFlowName = string.Empty;
-    private string _editFlowDesc = string.Empty;
-    private FlowStatus _editFlowStatus;
+    // ── Designer state ─────────────────────────────────────────────────
+    private Flow? _designing;
+    private bool _isDirty;
+    private string? _selectedNodeId;
+    private string? _selectedEdgeId;
+    private bool _connectMode;
+    private string? _connectFromId;
+    private List<EditNode> _wNodes = [];
+    private List<EditEdge>  _wEdges  = [];
+    private bool _jsInit;
+    private DotNetObjectReference<FlowDesigner>? _dotnetRef;
+    private readonly Stack<(List<EditNode> nodes, List<EditEdge> edges)> _undoStack = new();
+    private readonly Stack<(List<EditNode> nodes, List<EditEdge> edges)> _redoStack = new();
 
-    protected override async Task OnInitializedAsync()
+    // ── Mutable editor types ────────────────────────────────────────────
+    private class EditNode
     {
-        await LoadData();
+        public string Id { get; set; } = "";
+        public NodeType Type { get; set; }
+        public string Label { get; set; } = "";
+        public Guid? TemplateId { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public JsonObject Config { get; set; } = new();
+    }
+    private class EditEdge
+    {
+        public string Id { get; set; } = "";
+        public string From { get; set; } = "";
+        public string To { get; set; } = "";
+        public string? Condition { get; set; }
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_designing != null && !_jsInit)
+        {
+            _jsInit = true;
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("NoxFlowDesigner.init", _dotnetRef, "flow-svg");
+        }
+        else if (_designing == null && _jsInit)
+        {
+            _jsInit = false;
+            try { await JS.InvokeVoidAsync("NoxFlowDesigner.dispose"); } catch { }
+            _dotnetRef?.Dispose();
+            _dotnetRef = null;
+        }
+
+        // Re-sync visual selection after every render (Blazor may have patched the DOM)
+        if (_jsInit)
+        {
+            try
+            {
+                string hlType = _connectFromId != null ? "node"
+                    : _selectedNodeId != null ? "node"
+                    : _selectedEdgeId != null ? "edge" : "";
+                string hlId = _connectFromId ?? _selectedNodeId ?? _selectedEdgeId ?? "";
+                await JS.InvokeVoidAsync("NoxFlowDesigner.applySelection", hlType, hlId);
+            }
+            catch { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInit)
+            try { await JS.InvokeVoidAsync("NoxFlowDesigner.dispose"); } catch { }
+        _dotnetRef?.Dispose();
     }
 
     private async Task LoadData()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _flows = await db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
-        _runs = await db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(50).ToListAsync();
+        _flows     = await db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
+        _runs      = await db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(30).ToListAsync();
         _templates = await db.AgentTemplates.OrderBy(t => t.Name).ToListAsync();
     }
 
-    private void ViewFlow(Flow flow)
+    // ── JS Invokable callbacks ─────────────────────────────────────────
+    [JSInvokable]
+    public void JsSel(string type, string id)
     {
-        _selectedFlow = _selectedFlow?.Id == flow.Id ? null : flow;
-    }
-
-    private void AutoFillBranch()
-    {
-        if (!string.IsNullOrWhiteSpace(_runGithubBranch)) return;
-        _runGithubBranch = _runGithubIssueNumber.HasValue
-            ? $"ai/issue-{_runGithubIssueNumber}"
-            : $"ai/flow-{DateTimeOffset.UtcNow:yyyyMMdd-HHmm}";
-    }
-
-    private void OpenRunModal(Guid flowId)
-    {
-        _pendingRunFlowId = flowId;
-        _runError = string.Empty;
-        _showRunModal = true;
-    }
-
-    private async Task ConfirmStartFlow()
-    {
-        _runError = string.Empty;
-        _showRunModal = false;
-        try
+        if (_connectMode && type == "node")
         {
-            var variables = new System.Text.Json.Nodes.JsonObject();
-
-            if (!string.IsNullOrWhiteSpace(_runGithubRepo))
-                variables["github_repo"] = _runGithubRepo.Trim();
-            if (!string.IsNullOrWhiteSpace(_runGithubPat))
-                variables["github_pat"] = _runGithubPat.Trim();
-            if (!string.IsNullOrWhiteSpace(_runGithubBranch))
-                variables["github_branch"] = _runGithubBranch.Trim();
-            if (!string.IsNullOrWhiteSpace(_runGithubBaseBranch))
-                variables["github_base_branch"] = _runGithubBaseBranch.Trim();
-            if (_runGithubIssueNumber.HasValue)
-                variables["github_issue_number"] = _runGithubIssueNumber.Value;
-
-            // Merge extra variables if provided
-            if (!string.IsNullOrWhiteSpace(_runExtraVariables))
+            if (_connectFromId is null)
+                _connectFromId = id;
+            else if (_connectFromId != id)
             {
-                try
+                PushUndo();
+                _wEdges.Add(new EditEdge
                 {
-                    var extra = System.Text.Json.Nodes.JsonNode.Parse(_runExtraVariables)?.AsObject();
-                    if (extra is not null)
-                        foreach (var kv in extra)
-                            variables[kv.Key] = kv.Value?.DeepClone();
-                }
-                catch { /* ignore malformed JSON */ }
+                    Id   = Guid.NewGuid().ToString()[..8],
+                    From = _connectFromId, To = id
+                });
+                _isDirty = true;
+                _connectFromId = null;
+                _connectMode   = false;
             }
-
-            await FlowEngine.StartAsync(_pendingRunFlowId, variables);
-            await LoadData();
+            StateHasChanged();
+            return;
         }
-        catch (Exception ex)
-        {
-            _runError = ex.Message.Contains("Start node")
-                ? "Il flow non ha un nodo Start. Visualizza il grafo e verifica la struttura."
-                : $"Errore avvio: {ex.Message}";
-        }
+        _selectedNodeId = type == "node" ? id : null;
+        _selectedEdgeId = type == "edge" ? id : null;
+        StateHasChanged();
     }
 
+    [JSInvokable]
+    public void JsMoved(string nodeId, int x, int y)
+    {
+        var n = _wNodes.FirstOrDefault(n => n.Id == nodeId);
+        if (n is not null) { PushUndo(); n.X = x; n.Y = y; _isDirty = true; }
+        StateHasChanged();
+    }
+
+    // ── Designer open / close ──────────────────────────────────────────
+    private void OpenDesigner(Flow flow)
+    {
+        _designing = flow;
+        _wNodes = flow.Graph.Nodes.Select(n => new EditNode
+        {
+            Id = n.Id, Type = n.NodeType, Label = n.Label,
+            TemplateId = n.AgentTemplateId,
+            X = n.Position.X, Y = n.Position.Y,
+            Config = JsonNode.Parse(n.Config.ToJsonString())?.AsObject() ?? new()
+        }).ToList();
+        _wEdges = flow.Graph.Edges.Select(e => new EditEdge
+        {
+            Id = Guid.NewGuid().ToString()[..8],
+            From = e.FromNodeId, To = e.ToNodeId, Condition = e.Condition
+        }).ToList();
+        _isDirty = false;
+        _selectedNodeId = _selectedEdgeId = _connectFromId = null;
+        _connectMode = false;
+        _undoStack.Clear();
+        _redoStack.Clear();
+    }
+
+    private async Task CloseDesigner()
+    {
+        _designing = null;
+        _jsInit    = false;
+        await LoadData();
+    }
+
+    // ── Undo / Redo ────────────────────────────────────────────────────
+    private static EditNode CloneNode(EditNode n) => new()
+    {
+        Id = n.Id, Type = n.Type, Label = n.Label, TemplateId = n.TemplateId,
+        X = n.X, Y = n.Y,
+        Config = JsonNode.Parse(n.Config.ToJsonString())?.AsObject() ?? new()
+    };
+    private static EditEdge CloneEdge(EditEdge e) => new()
+        { Id = e.Id, From = e.From, To = e.To, Condition = e.Condition };
+
+    private void PushUndo()
+    {
+        _undoStack.Push((_wNodes.Select(CloneNode).ToList(), _wEdges.Select(CloneEdge).ToList()));
+        if (_undoStack.Count > 50) { var arr = _undoStack.ToArray(); _undoStack.Clear(); foreach (var s in arr[..49]) _undoStack.Push(s); }
+        _redoStack.Clear();
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        _redoStack.Push((_wNodes.Select(CloneNode).ToList(), _wEdges.Select(CloneEdge).ToList()));
+        var (nodes, edges) = _undoStack.Pop();
+        _wNodes = nodes; _wEdges = edges;
+        _selectedNodeId = _selectedEdgeId = null;
+        _isDirty = true;
+    }
+
+    private void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        _undoStack.Push((_wNodes.Select(CloneNode).ToList(), _wEdges.Select(CloneEdge).ToList()));
+        var (nodes, edges) = _redoStack.Pop();
+        _wNodes = nodes; _wEdges = edges;
+        _selectedNodeId = _selectedEdgeId = null;
+        _isDirty = true;
+    }
+
+    // ── Node management ────────────────────────────────────────────────
+    private void AddNode(NodeType type)
+    {
+        PushUndo();
+        var stagger = _wNodes.Count % 8;
+        _wNodes.Add(new EditNode
+        {
+            Id    = $"{type.ToString().ToLower()}-{Guid.NewGuid().ToString()[..6]}",
+            Type  = type,
+            Label = DefaultLabel(type),
+            X     = 200 + stagger * 25,
+            Y     = 150 + stagger * 20
+        });
+        _selectedNodeId = _wNodes.Last().Id;
+        _selectedEdgeId = null;
+        _isDirty = true;
+    }
+
+    private void DeleteSelected()
+    {
+        PushUndo();
+        if (_selectedNodeId is not null)
+        {
+            _wNodes.RemoveAll(n => n.Id == _selectedNodeId);
+            _wEdges.RemoveAll(e => e.From == _selectedNodeId || e.To == _selectedNodeId);
+            _selectedNodeId = null;
+        }
+        else if (_selectedEdgeId is not null)
+        {
+            _wEdges.RemoveAll(e => e.Id == _selectedEdgeId);
+            _selectedEdgeId = null;
+        }
+        _isDirty = true;
+    }
+
+    private void ToggleConnect()
+    {
+        _connectMode   = !_connectMode;
+        _connectFromId = null;
+    }
+
+    private void CancelConnect()
+    {
+        _connectMode   = false;
+        _connectFromId = null;
+    }
+
+    private async Task FitView()
+    {
+        try { await JS.InvokeVoidAsync("NoxFlowDesigner.fitView"); } catch { }
+    }
+
+    // ── Save graph ─────────────────────────────────────────────────────
+    private async Task SaveGraph()
+    {
+        if (_designing is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var flow = await db.Flows.FindAsync(_designing.Id);
+        if (flow is null) return;
+
+        // Clear and rebuild
+        flow.Graph.Nodes.Clear();
+        flow.Graph.Edges.Clear();
+
+        foreach (var n in _wNodes)
+            flow.Graph.Nodes.Add(new FlowNode
+            {
+                Id = n.Id, NodeType = n.Type, Label = n.Label,
+                AgentTemplateId = n.TemplateId,
+                Config = n.Config,
+                Position = new FlowPosition(n.X, n.Y)
+            });
+        foreach (var e in _wEdges)
+            flow.Graph.Edges.Add(new FlowEdge
+            {
+                FromNodeId = e.From, ToNodeId = e.To, Condition = e.Condition
+            });
+
+        flow.UpdatedAt = DateTimeOffset.UtcNow;
+        flow.Version++;
+        await db.SaveChangesAsync();
+        _isDirty = false;
+        _designing = flow;
+    }
+
+    // ── Create / edit meta ─────────────────────────────────────────────
     private async Task CreateFlow()
     {
         if (string.IsNullOrWhiteSpace(_newFlowName)) return;
-
-        // Scaffold a minimal valid graph
         var graph = new FlowGraph();
-        if (_newFlowTemplateId != Guid.Empty)
-        {
-            var tpl = _templates.FirstOrDefault(t => t.Id == _newFlowTemplateId);
-            graph.Nodes.Add(new FlowNode { Id = "start-1",  NodeType = NodeType.Start,     Label = "Start", Position = new(100, 200) });
-            graph.Nodes.Add(new FlowNode { Id = "task-1",   NodeType = NodeType.AgentTask,  Label = tpl?.Name ?? "Agent Task", AgentTemplateId = _newFlowTemplateId, Position = new(300, 200) });
-            graph.Nodes.Add(new FlowNode { Id = "end-1",    NodeType = NodeType.End,        Label = "End",   Position = new(500, 200) });
-            graph.Edges.Add(new FlowEdge { FromNodeId = "start-1", ToNodeId = "task-1" });
-            graph.Edges.Add(new FlowEdge { FromNodeId = "task-1",  ToNodeId = "end-1"  });
-        }
-        else
-        {
-            graph.Nodes.Add(new FlowNode { Id = "start-1", NodeType = NodeType.Start, Label = "Start", Position = new(100, 200) });
-            graph.Nodes.Add(new FlowNode { Id = "end-1",   NodeType = NodeType.End,   Label = "End",   Position = new(300, 200) });
-            graph.Edges.Add(new FlowEdge { FromNodeId = "start-1", ToNodeId = "end-1" });
-        }
-
+        graph.Nodes.Add(new FlowNode { Id = "start-1", NodeType = NodeType.Start, Label = "Start", Position = new(100, 200) });
+        graph.Nodes.Add(new FlowNode { Id = "end-1",   NodeType = NodeType.End,   Label = "End",   Position = new(400, 200) });
+        graph.Edges.Add(new FlowEdge { FromNodeId = "start-1", ToNodeId = "end-1" });
         var flow = new Flow
         {
             Name = _newFlowName,
             Description = string.IsNullOrWhiteSpace(_newFlowDesc) ? null : _newFlowDesc,
             ProjectId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            CreatedBy = "HITL User",
-            Graph = graph,
-            Status = FlowStatus.Active,
+            CreatedBy = "HITL User", Graph = graph, Status = FlowStatus.Active
         };
         await using var db = await DbFactory.CreateDbContextAsync();
         db.Flows.Add(flow);
         await db.SaveChangesAsync();
-
-        _showCreateModal = false;
-        _newFlowName = string.Empty;
-        _newFlowDesc = string.Empty;
-        _newFlowTemplateId = Guid.Empty;
+        _showCreateModal = false; _newFlowName = _newFlowDesc = string.Empty;
         await LoadData();
     }
 
-    private void OpenEditFlow(Flow flow)
+    private void OpenEditMeta(Flow flow)
     {
-        _editingFlow = flow;
-        _editFlowName = flow.Name;
-        _editFlowDesc = flow.Description ?? string.Empty;
-        _editFlowStatus = flow.Status;
+        _editingMeta = flow;
+        _editMetaName = flow.Name;
+        _editMetaDesc = flow.Description ?? string.Empty;
+        _editMetaStatus = flow.Status;
     }
 
-    private async Task SaveEditFlow()
+    private async Task SaveMeta()
     {
-        if (_editingFlow is null || string.IsNullOrWhiteSpace(_editFlowName)) return;
+        if (_editingMeta is null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var existing = await db.Flows.FindAsync(_editingFlow.Id);
+        var existing = await db.Flows.FindAsync(_editingMeta.Id);
         if (existing is not null)
         {
-            existing.Name = _editFlowName;
-            existing.Description = string.IsNullOrWhiteSpace(_editFlowDesc) ? null : _editFlowDesc;
-            existing.Status = _editFlowStatus;
+            existing.Name = _editMetaName;
+            existing.Description = string.IsNullOrWhiteSpace(_editMetaDesc) ? null : _editMetaDesc;
+            existing.Status = _editMetaStatus;
             await db.SaveChangesAsync();
         }
-        _editingFlow = null;
+        _editingMeta = null;
         await LoadData();
     }
 
-    private static string GetFlowStatusColor(FlowStatus s) => s switch
+    // ── Run modal ──────────────────────────────────────────────────────
+    private void OpenRunModal(Guid id) { _pendingRunId = id; _showRunModal = true; _runError = string.Empty; }
+
+    private void AutoFillBranch()
     {
-        FlowStatus.Active => "success",
-        FlowStatus.Draft => "secondary",
-        FlowStatus.Paused => "warning",
-        FlowStatus.Completed => "info",
-        FlowStatus.Failed => "danger",
-        _ => "secondary"
+        if (!string.IsNullOrWhiteSpace(_runBranch)) return;
+        _runBranch = _runIssue.HasValue
+            ? $"ai/issue-{_runIssue}"
+            : $"ai/flow-{DateTimeOffset.UtcNow:yyyyMMdd-HHmm}";
+    }
+
+    private async Task ConfirmRun()
+    {
+        _showRunModal = false;
+        _runError = string.Empty;
+        try
+        {
+            var vars = new JsonObject();
+            if (!string.IsNullOrWhiteSpace(_runRepo))       vars["github_repo"]         = _runRepo.Trim();
+            if (!string.IsNullOrWhiteSpace(_runPat))        vars["github_pat"]          = _runPat.Trim();
+            if (!string.IsNullOrWhiteSpace(_runBranch))     vars["github_branch"]       = _runBranch.Trim();
+            if (!string.IsNullOrWhiteSpace(_runBaseBranch)) vars["github_base_branch"]  = _runBaseBranch.Trim();
+            if (_runIssue.HasValue)                         vars["github_issue_number"] = _runIssue.Value;
+            if (!string.IsNullOrWhiteSpace(_runExtra))
+            {
+                try { var ex = JsonNode.Parse(_runExtra)?.AsObject();
+                    if (ex is not null) foreach (var kv in ex) vars[kv.Key] = kv.Value?.DeepClone(); }
+                catch { }
+            }
+            await FlowEngine.StartAsync(_pendingRunId, vars);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _runError = ex.Message.Contains("Start node")
+                ? "Il flow non ha un nodo Start. Aprilo nel designer e aggiungine uno."
+                : $"Errore avvio: {ex.Message}";
+        }
+    }
+
+    // ── SVG node / edge rendering ──────────────────────────────────────
+    private static string H(string s) => System.Net.WebUtility.HtmlEncode(s);
+
+    private MarkupString RenderEdgeLabel(string cond, double x, double y) =>
+        new($"<text x=\"{x:F0}\" y=\"{y:F0}\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\" style=\"pointer-events:none;user-select:none;font-family:monospace\">{H(cond)}</text>");
+
+    private MarkupString RenderNode(EditNode n)
+    {
+        int pw = NodePW(n.Type), ph = NodePH(n.Type);
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<g data-nid=\"{n.Id}\" data-x=\"{(int)n.X}\" data-y=\"{(int)n.Y}\" data-pw=\"{pw}\" data-ph=\"{ph}\" transform=\"translate({(int)n.X},{(int)n.Y})\" style=\"cursor:grab\">");
+
+        switch (n.Type)
+        {
+            case NodeType.Start:
+                sb.Append("<circle class=\"node-shape\" cx=\"28\" cy=\"28\" r=\"26\" fill=\"#22c55e\" stroke=\"#16a34a\" stroke-width=\"1.5\"/>");
+                sb.Append("<circle cx=\"28\" cy=\"28\" r=\"18\" fill=\"none\" stroke=\"white\" stroke-width=\"1.5\" opacity=\".6\"/>");
+                sb.Append("<text x=\"28\" y=\"33\" text-anchor=\"middle\" fill=\"white\" font-size=\"11\" font-weight=\"700\" style=\"pointer-events:none;user-select:none\">START</text>");
+                break;
+
+            case NodeType.End:
+                sb.Append("<circle class=\"node-shape\" cx=\"28\" cy=\"28\" r=\"26\" fill=\"#ef4444\" stroke=\"#dc2626\" stroke-width=\"1.5\"/>");
+                sb.Append("<rect x=\"15\" y=\"15\" width=\"26\" height=\"26\" rx=\"3\" fill=\"white\" opacity=\".9\"/>");
+                sb.Append("<text x=\"28\" y=\"33\" text-anchor=\"middle\" fill=\"#ef4444\" font-size=\"11\" font-weight=\"700\" style=\"pointer-events:none;user-select:none\">END</text>");
+                break;
+
+            case NodeType.AgentTask:
+                sb.Append("<rect class=\"node-shape\" width=\"160\" height=\"54\" rx=\"10\" fill=\"#3b82f6\" stroke=\"#2563eb\" stroke-width=\"1\"/>");
+                sb.Append("<rect x=\"8\" y=\"10\" width=\"24\" height=\"24\" rx=\"5\" fill=\"white\" opacity=\".2\"/>");
+                sb.Append("<text x=\"20\" y=\"27\" text-anchor=\"middle\" font-size=\"14\" style=\"pointer-events:none;user-select:none\">🤖</text>");
+                sb.Append($"<text x=\"88\" y=\"24\" text-anchor=\"middle\" fill=\"white\" font-size=\"12\" font-weight=\"600\" style=\"pointer-events:none;user-select:none\">{H(Truncate(n.Label, 17))}</text>");
+                if (n.TemplateId.HasValue)
+                {
+                    var tpl = _templates.FirstOrDefault(t => t.Id == n.TemplateId);
+                    sb.Append($"<text x=\"88\" y=\"40\" text-anchor=\"middle\" fill=\"#bfdbfe\" font-size=\"9.5\" style=\"pointer-events:none;user-select:none\">{H(Truncate(tpl?.Role ?? "—", 22))}</text>");
+                }
+                break;
+
+            case NodeType.HitlCheckpoint:
+                sb.Append("<rect class=\"node-shape\" width=\"160\" height=\"54\" rx=\"27\" fill=\"#f59e0b\" stroke=\"#d97706\" stroke-width=\"1.5\" stroke-dasharray=\"5,3\"/>");
+                sb.Append("<text x=\"26\" y=\"33\" text-anchor=\"middle\" font-size=\"15\" style=\"pointer-events:none;user-select:none\">👁</text>");
+                sb.Append($"<text x=\"88\" y=\"24\" text-anchor=\"middle\" fill=\"white\" font-size=\"12\" font-weight=\"600\" style=\"pointer-events:none;user-select:none\">{H(Truncate(n.Label, 17))}</text>");
+                sb.Append("<text x=\"88\" y=\"40\" text-anchor=\"middle\" fill=\"#fef3c7\" font-size=\"9.5\" style=\"pointer-events:none;user-select:none\">HITL Checkpoint</text>");
+                break;
+
+            case NodeType.Decision:
+                sb.Append("<polygon class=\"node-shape\" points=\"80,2 158,40 80,78 2,40\" fill=\"#8b5cf6\" stroke=\"#7c3aed\" stroke-width=\"1.5\"/>");
+                sb.Append($"<text x=\"80\" y=\"38\" text-anchor=\"middle\" fill=\"white\" font-size=\"11\" font-weight=\"600\" style=\"pointer-events:none;user-select:none\">{H(Truncate(n.Label, 13))}</text>");
+                sb.Append("<text x=\"80\" y=\"52\" text-anchor=\"middle\" fill=\"#ddd6fe\" font-size=\"9\" style=\"pointer-events:none;user-select:none\">Decision</text>");
+                break;
+
+            case NodeType.Fork:
+                sb.Append("<rect class=\"node-shape\" width=\"120\" height=\"16\" rx=\"4\" fill=\"#64748b\" stroke=\"#475569\" stroke-width=\"1\"/>");
+                sb.Append("<text x=\"60\" y=\"12\" text-anchor=\"middle\" fill=\"white\" font-size=\"9\" font-weight=\"600\" style=\"pointer-events:none;user-select:none\">FORK</text>");
+                break;
+
+            case NodeType.Join:
+                sb.Append("<rect class=\"node-shape\" width=\"120\" height=\"16\" rx=\"4\" fill=\"#475569\" stroke=\"#334155\" stroke-width=\"1\"/>");
+                sb.Append("<text x=\"60\" y=\"12\" text-anchor=\"middle\" fill=\"white\" font-size=\"9\" font-weight=\"600\" style=\"pointer-events:none;user-select:none\">JOIN</text>");
+                break;
+        }
+        sb.Append("</g>");
+        return new MarkupString(sb.ToString());
+    }
+
+    // ── SVG helpers ────────────────────────────────────────────────────
+    private static int NodePW(NodeType t) => t switch
+    {
+        NodeType.Start or NodeType.End => 56,
+        NodeType.Fork  or NodeType.Join => 120,
+        _ => 160
+    };
+    private static int NodePH(NodeType t) => t switch
+    {
+        NodeType.Start or NodeType.End => 28,
+        NodeType.Fork  or NodeType.Join => 8,
+        NodeType.Decision => 40,
+        _ => 27
     };
 
-    private static string GetRunStatusColor(FlowRunStatus s) => s switch
+    private string EdgePath(EditEdge e)
     {
-        FlowRunStatus.Running => "primary",
-        FlowRunStatus.Paused => "warning",
-        FlowRunStatus.Completed => "success",
-        FlowRunStatus.Failed => "danger",
-        FlowRunStatus.Cancelled => "secondary",
-        _ => "secondary"
+        var fn = _wNodes.FirstOrDefault(n => n.Id == e.From);
+        var tn = _wNodes.FirstOrDefault(n => n.Id == e.To);
+        if (fn is null || tn is null) return "";
+        double fx = fn.X + NodePW(fn.Type), fy = fn.Y + NodePH(fn.Type);
+        double tx = tn.X,                   ty = tn.Y + NodePH(tn.Type);
+        double dx = Math.Max(60, Math.Abs(tx - fx) * 0.5);
+        return $"M{fx:F0},{fy:F0} C{fx+dx:F0},{fy:F0} {tx-dx:F0},{ty:F0} {tx:F0},{ty:F0}";
+    }
+
+    private (double x, double y) EdgeMid(EditEdge e)
+    {
+        var fn = _wNodes.FirstOrDefault(n => n.Id == e.From);
+        var tn = _wNodes.FirstOrDefault(n => n.Id == e.To);
+        if (fn is null || tn is null) return (0, 0);
+        double fx = fn.X + NodePW(fn.Type), fy = fn.Y + NodePH(fn.Type);
+        double tx = tn.X,                   ty = tn.Y + NodePH(tn.Type);
+        return ((fx + tx) / 2, (fy + ty) / 2);
+    }
+
+    private static string NodeColor(NodeType t) => t switch
+    {
+        NodeType.Start           => "#22c55e",
+        NodeType.End             => "#ef4444",
+        NodeType.AgentTask       => "#3b82f6",
+        NodeType.HitlCheckpoint  => "#f59e0b",
+        NodeType.Decision        => "#8b5cf6",
+        _                        => "#64748b"
+    };
+
+    private static string NodeTypeLabel(NodeType t) => t switch
+    {
+        NodeType.Start           => "▶ Nodo Start",
+        NodeType.End             => "⏹ Nodo End",
+        NodeType.AgentTask       => "🤖 Agent Task",
+        NodeType.HitlCheckpoint  => "👁 HITL Checkpoint",
+        NodeType.Decision        => "◇ Decision",
+        NodeType.Fork            => "⑂ Fork",
+        NodeType.Join            => "⑃ Join",
+        _                        => t.ToString()
+    };
+
+    private static string DefaultLabel(NodeType t) => t switch
+    {
+        NodeType.Start           => "Start",
+        NodeType.End             => "End",
+        NodeType.AgentTask       => "Agent Task",
+        NodeType.HitlCheckpoint  => "Checkpoint",
+        NodeType.Decision        => "Decision",
+        NodeType.Fork            => "Fork",
+        NodeType.Join            => "Join",
+        _                        => t.ToString()
+    };
+
+    private static string Truncate(string s, int max) =>
+        s.Length > max ? s[..max] + "…" : s;
+
+    // Config helpers
+    private static string CfgStr(EditNode n, string key, string def = "") =>
+        n.Config.TryGetPropertyValue(key, out var v) && v is not null
+            ? (v.GetValueKind() == System.Text.Json.JsonValueKind.String
+               ? v.GetValue<string>() : v.ToString()) : def;
+
+    private static int CfgInt(EditNode n, string key, int def = 0) =>
+        n.Config.TryGetPropertyValue(key, out var v) && v is not null
+            ? (int)(v.GetValue<double>()) : def;
+
+    private void SetCfgStr(EditNode n, string key, string? val)
+    {
+        if (string.IsNullOrEmpty(val)) n.Config.Remove(key); else n.Config[key] = val;
+        _isDirty = true;
+    }
+
+    private void SetCfgInt(EditNode n, string key, string? raw)
+    {
+        if (int.TryParse(raw, out var v)) n.Config[key] = v;
+        _isDirty = true;
+    }
+
+    private static string GetFlowColor(FlowStatus s) => s switch
+    {
+        FlowStatus.Active    => "success",  FlowStatus.Draft => "secondary",
+        FlowStatus.Paused    => "warning",  FlowStatus.Completed => "info",
+        FlowStatus.Failed    => "danger",   _ => "secondary"
+    };
+
+    private static string GetRunColor(FlowRunStatus s) => s switch
+    {
+        FlowRunStatus.Running    => "primary",  FlowRunStatus.Paused => "warning",
+        FlowRunStatus.Completed  => "success",  FlowRunStatus.Failed => "danger",
+        FlowRunStatus.Cancelled  => "secondary",_ => "secondary"
     };
 }
