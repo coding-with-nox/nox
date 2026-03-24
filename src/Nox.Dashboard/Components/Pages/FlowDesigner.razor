@@ -1,23 +1,33 @@
 @page "/flows"
 @using Nox.Domain
 @using Nox.Domain.Flows
+@using Nox.Domain.Agents
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
+@inherits NoxPageBase
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IFlowEngine FlowEngine
 @inject NavigationManager Navigation
 
-<PageTitle>Flow Designer — Nox</PageTitle>
+<PageTitle>@Loc["flows.title"] — Nox</PageTitle>
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🔀 Flow Designer</h2>
-        <button class="btn btn-primary" @onclick="() => _showCreateModal = true">+ New Flow</button>
+        <h2>⇄ @Loc["flows.title"]</h2>
+        <button class="btn btn-primary" @onclick="() => _showCreateModal = true">@Loc["flows.new"]</button>
     </div>
+
+    @if (!string.IsNullOrEmpty(_runError))
+    {
+        <div class="alert alert-danger d-flex justify-content-between align-items-center">
+            <span>@_runError</span>
+            <button class="btn-close btn-sm" @onclick="() => _runError = string.Empty"></button>
+        </div>
+    }
 
     @if (_flows.Count == 0)
     {
-        <div class="alert alert-secondary">No flows yet. Create your first flow to get started.</div>
+        <div class="alert alert-secondary">@Loc["flows.no_flows"]</div>
     }
     else
     {
@@ -33,14 +43,15 @@
                         <div class="card-body">
                             <p class="text-muted small">@flow.Description</p>
                             <div class="small">
-                                <span class="me-3">🗂 @flow.Graph.Nodes.Count nodes</span>
-                                <span>🔗 @flow.Graph.Edges.Count edges</span>
+                                <span class="me-3">🗂 @flow.Graph.Nodes.Count @Loc["flows.nodes"]</span>
+                                <span>🔗 @flow.Graph.Edges.Count @Loc["flows.edges"]</span>
                             </div>
                             <div class="small text-muted mt-1">v@flow.Version · Updated @flow.UpdatedAt.ToString("dd/MM HH:mm")</div>
                         </div>
                         <div class="card-footer d-flex gap-2">
-                            <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewFlow(flow)">View</button>
-                            <button class="btn btn-success btn-sm" @onclick="() => StartFlow(flow.Id)">▶ Run</button>
+                            <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewFlow(flow)">@Loc["flows.view"]</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => StartFlow(flow.Id)">@Loc["flows.run"]</button>
+                            <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditFlow(flow)">@Loc["edit"]</button>
                         </div>
                     </div>
                 </div>
@@ -56,7 +67,7 @@
                 <div class="card-body" style="overflow-x: auto;">
                     <!-- Simple text-based graph visualization -->
                     <table class="table table-sm">
-                        <thead><tr><th>Node</th><th>Type</th><th>Outgoing Edges</th></tr></thead>
+                        <thead><tr><th>@Loc["flows.node"]</th><th>@Loc["type"]</th><th>@Loc["flows.outgoing"]</th></tr></thead>
                         <tbody>
                             @foreach (var node in _selectedFlow.Graph.Nodes)
                             {
@@ -86,9 +97,9 @@
 
     @if (_runs.Count > 0)
     {
-        <h4 class="mt-4">Recent Runs</h4>
+        <h4 class="mt-4">@Loc["flows.recent"]</h4>
         <table class="table table-sm">
-            <thead><tr><th>Run ID</th><th>Flow</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
+            <thead><tr><th>@Loc["flows.run_id"]</th><th>@Loc["home.flow"]</th><th>@Loc["status"]</th><th>@Loc["flows.started"]</th><th>@Loc["flows.completed"]</th></tr></thead>
             <tbody>
                 @foreach (var run in _runs.Take(20))
                 {
@@ -111,22 +122,71 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">New Flow</h5>
+                    <h5 class="modal-title">@Loc["flows.new_title"]</h5>
                     <button class="btn-close" @onclick="() => _showCreateModal = false"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Name</label>
-                        <input class="form-control" @bind="_newFlowName" />
+                        <label class="form-label">@Loc["name"] *</label>
+                        <input class="form-control" @bind="_newFlowName" placeholder="es. Analisi Codice Backend" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Description</label>
+                        <label class="form-label">@Loc["flows.desc"]</label>
                         <textarea class="form-control" rows="2" @bind="_newFlowDesc"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["flows.template_agent"]</label>
+                        <select class="form-select" @bind="_newFlowTemplateId">
+                            <option value="@Guid.Empty">— @Loc["flows.no_template"] —</option>
+                            @foreach (var t in _templates)
+                            {
+                                <option value="@t.Id">@t.Name (@t.Role)</option>
+                            }
+                        </select>
+                        <div class="form-text">@Loc["flows.template_hint"]</div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => _showCreateModal = false">Cancel</button>
-                    <button class="btn btn-primary" @onclick="CreateFlow">Create</button>
+                    <button class="btn btn-secondary" @onclick="() => _showCreateModal = false">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="CreateFlow">@Loc["flows.create"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@if (_editingFlow is not null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Loc["edit"]: @_editingFlow.Name</h5>
+                    <button class="btn-close" @onclick="() => _editingFlow = null"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["name"] *</label>
+                        <input class="form-control" @bind="_editFlowName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["flows.desc"]</label>
+                        <textarea class="form-control" rows="2" @bind="_editFlowDesc"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["status"]</label>
+                        <select class="form-select" @bind="_editFlowStatus">
+                            @foreach (var s in Enum.GetValues<FlowStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _editingFlow = null">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="SaveEditFlow">@Loc["save"]</button>
                 </div>
             </div>
         </div>
@@ -137,10 +197,19 @@
 @code {
     private List<Flow> _flows = [];
     private List<FlowRun> _runs = [];
+    private List<AgentTemplate> _templates = [];
     private Flow? _selectedFlow;
     private bool _showCreateModal;
     private string _newFlowName = string.Empty;
     private string _newFlowDesc = string.Empty;
+    private Guid _newFlowTemplateId = Guid.Empty;
+    private string _runError = string.Empty;
+
+    // Edit state
+    private Flow? _editingFlow;
+    private string _editFlowName = string.Empty;
+    private string _editFlowDesc = string.Empty;
+    private FlowStatus _editFlowStatus;
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,6 +221,7 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _flows = await db.Flows.OrderByDescending(f => f.UpdatedAt).ToListAsync();
         _runs = await db.FlowRuns.OrderByDescending(r => r.StartedAt).Take(50).ToListAsync();
+        _templates = await db.AgentTemplates.OrderBy(t => t.Name).ToListAsync();
     }
 
     private void ViewFlow(Flow flow)
@@ -161,20 +231,50 @@
 
     private async Task StartFlow(Guid flowId)
     {
-        await FlowEngine.StartAsync(flowId);
-        await LoadData();
+        _runError = string.Empty;
+        try
+        {
+            await FlowEngine.StartAsync(flowId);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _runError = ex.Message.Contains("no Start node")
+                ? "Il flow non ha un nodo Start. Visualizza il grafo e verifica la struttura."
+                : $"Errore avvio: {ex.Message}";
+        }
     }
 
     private async Task CreateFlow()
     {
         if (string.IsNullOrWhiteSpace(_newFlowName)) return;
 
+        // Scaffold a minimal valid graph
+        var graph = new FlowGraph();
+        if (_newFlowTemplateId != Guid.Empty)
+        {
+            var tpl = _templates.FirstOrDefault(t => t.Id == _newFlowTemplateId);
+            graph.Nodes.Add(new FlowNode { Id = "start-1",  NodeType = NodeType.Start,     Label = "Start", Position = new(100, 200) });
+            graph.Nodes.Add(new FlowNode { Id = "task-1",   NodeType = NodeType.AgentTask,  Label = tpl?.Name ?? "Agent Task", AgentTemplateId = _newFlowTemplateId, Position = new(300, 200) });
+            graph.Nodes.Add(new FlowNode { Id = "end-1",    NodeType = NodeType.End,        Label = "End",   Position = new(500, 200) });
+            graph.Edges.Add(new FlowEdge { FromNodeId = "start-1", ToNodeId = "task-1" });
+            graph.Edges.Add(new FlowEdge { FromNodeId = "task-1",  ToNodeId = "end-1"  });
+        }
+        else
+        {
+            graph.Nodes.Add(new FlowNode { Id = "start-1", NodeType = NodeType.Start, Label = "Start", Position = new(100, 200) });
+            graph.Nodes.Add(new FlowNode { Id = "end-1",   NodeType = NodeType.End,   Label = "End",   Position = new(300, 200) });
+            graph.Edges.Add(new FlowEdge { FromNodeId = "start-1", ToNodeId = "end-1" });
+        }
+
         var flow = new Flow
         {
             Name = _newFlowName,
-            Description = _newFlowDesc,
+            Description = string.IsNullOrWhiteSpace(_newFlowDesc) ? null : _newFlowDesc,
             ProjectId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            CreatedBy = "HITL User"
+            CreatedBy = "HITL User",
+            Graph = graph,
+            Status = FlowStatus.Active,
         };
         await using var db = await DbFactory.CreateDbContextAsync();
         db.Flows.Add(flow);
@@ -183,6 +283,31 @@
         _showCreateModal = false;
         _newFlowName = string.Empty;
         _newFlowDesc = string.Empty;
+        _newFlowTemplateId = Guid.Empty;
+        await LoadData();
+    }
+
+    private void OpenEditFlow(Flow flow)
+    {
+        _editingFlow = flow;
+        _editFlowName = flow.Name;
+        _editFlowDesc = flow.Description ?? string.Empty;
+        _editFlowStatus = flow.Status;
+    }
+
+    private async Task SaveEditFlow()
+    {
+        if (_editingFlow is null || string.IsNullOrWhiteSpace(_editFlowName)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var existing = await db.Flows.FindAsync(_editingFlow.Id);
+        if (existing is not null)
+        {
+            existing.Name = _editFlowName;
+            existing.Description = string.IsNullOrWhiteSpace(_editFlowDesc) ? null : _editFlowDesc;
+            existing.Status = _editFlowStatus;
+            await db.SaveChangesAsync();
+        }
+        _editingFlow = null;
         await LoadData();
     }
 

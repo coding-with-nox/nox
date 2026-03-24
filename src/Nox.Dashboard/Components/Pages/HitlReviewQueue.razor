@@ -2,25 +2,26 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using Nox.Domain
 @using Nox.Domain.Hitl
+@inherits NoxPageBase
 @inject NavigationManager Navigation
 @inject IHitlQueue HitlQueue
 @inject IConfiguration Configuration
 @inject IHttpContextAccessor HttpContextAccessor
 @implements IAsyncDisposable
 
-<PageTitle>HITL Review Queue — Nox</PageTitle>
+<PageTitle>@Loc["hitl.title"] — Nox</PageTitle>
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🧑‍💼 HITL Review Queue</h2>
+        <h2>◉ @Loc["hitl.title"]</h2>
         <span class="badge bg-@(IsConnected ? "success" : "warning")">
-            @(IsConnected ? "Live" : "Connecting...")
+            @(IsConnected ? Loc["hitl.live"] : Loc["hitl.connecting"])
         </span>
     </div>
 
     @if (_checkpoints.Count == 0)
     {
-        <div class="alert alert-info">No pending checkpoints. The agents are working...</div>
+        <div class="alert alert-info">@Loc["hitl.no_pending"]</div>
     }
     else
     {
@@ -36,7 +37,7 @@
                             </span>
                             @if (cp.ExpiresAt.HasValue)
                             {
-                                <small class="text-muted">Expires: @cp.ExpiresAt.Value.ToString("HH:mm")</small>
+                                <small class="text-muted">@Loc["hitl.expires"]: @cp.ExpiresAt.Value.ToString("HH:mm")</small>
                             }
                         </div>
                         <div class="card-body">
@@ -57,14 +58,14 @@
                             else
                             {
                                 <button class="btn btn-success btn-sm" @onclick='() => Decide(cp.Id, "Approved")'>
-                                    ✓ Approve
+                                    @Loc["approve"]
                                 </button>
                                 <button class="btn btn-danger btn-sm" @onclick='() => Decide(cp.Id, "Rejected")'>
-                                    ✗ Reject
+                                    @Loc["reject"]
                                 </button>
                             }
                             <button class="btn btn-warning btn-sm ms-auto" @onclick="() => Escalate(cp.Id)">
-                                ↑ Escalate
+                                @Loc["hitl.escalate"]
                             </button>
                         </div>
                     </div>
@@ -75,9 +76,9 @@
 
     @if (_recentDecisions.Count > 0)
     {
-        <h4 class="mt-4">Recent Decisions</h4>
+        <h4 class="mt-4">@Loc["hitl.recent"]</h4>
         <table class="table table-sm">
-            <thead><tr><th>Title</th><th>Decision</th><th>By</th><th>At</th></tr></thead>
+            <thead><tr><th>@Loc["hitl.title_col"]</th><th>@Loc["hitl.decision"]</th><th>@Loc["hitl.by"]</th><th>@Loc["hitl.at"]</th></tr></thead>
             <tbody>
                 @foreach (var d in _recentDecisions.Take(10))
                 {
@@ -176,6 +177,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        base.Dispose();
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
     }

@@ -1,0 +1,284 @@
+@page "/wiki"
+@inherits NoxPageBase
+
+<PageTitle>@Loc["nav.wiki"] — Nox</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">📖 @Loc["nav.wiki"]</h2>
+            <small class="text-muted">@Loc["nav.docs"] — Nox Orchestration Platform</small>
+        </div>
+    </div>
+
+    <div class="row g-3">
+
+        <!-- Dashboard -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>⊞ @Loc["nav.dashboard"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">La dashboard principale mostra una panoramica in tempo reale dell'intera piattaforma Nox.</p>
+                        <ul class="small">
+                            <li><strong>KPI Cards</strong>: contatori live di revisioni pendenti, flow attivi, agenti e skill.</li>
+                            <li><strong>Run Recenti</strong>: ultimi 8 flow run con stato e timestamp.</li>
+                            <li><strong>Revisioni Pendenti</strong>: i checkpoint HITL che richiedono attenzione immediata.</li>
+                            <li><strong>Info Sistema</strong>: contatori globali di flow, template, skill e server MCP.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">The main dashboard shows a real-time overview of the entire Nox platform.</p>
+                        <ul class="small">
+                            <li><strong>KPI Cards</strong>: live counters for pending reviews, active flows, agents and skills.</li>
+                            <li><strong>Recent Runs</strong>: last 8 flow runs with status and timestamp.</li>
+                            <li><strong>Pending Reviews</strong>: HITL checkpoints requiring immediate attention.</li>
+                            <li><strong>System Info</strong>: global counters for flows, templates, skills and MCP servers.</li>
+                        </ul>
+                    }
+                    <a href="" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.dashboard"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flow Designer -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>⇄ @Loc["nav.flows"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">Il Flow Designer consente di creare e gestire i workflow multi-agente.</p>
+                        <ul class="small">
+                            <li><strong>Crea Flow</strong>: definisci nome e descrizione. Il grafo di nodi si costruisce programmaticamente.</li>
+                            <li><strong>Avvia Run</strong>: ogni flow può essere avviato generando un <em>FlowRun</em> tracciato.</li>
+                            <li><strong>Run Recenti</strong>: storico delle ultime 50 esecuzioni con stato (Running, Paused, Completed, Failed).</li>
+                            <li><strong>Struttura nodi</strong>: ogni nodo ha tipo (Start, AgentTask, HitlCheckpoint, Decision, Fork, Join, End) e archi uscenti con condizioni opzionali.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">The Flow Designer lets you create and manage multi-agent workflows.</p>
+                        <ul class="small">
+                            <li><strong>Create Flow</strong>: define name and description. The node graph is built programmatically.</li>
+                            <li><strong>Start Run</strong>: each flow can be started generating a tracked <em>FlowRun</em>.</li>
+                            <li><strong>Recent Runs</strong>: history of the last 50 executions with status (Running, Paused, Completed, Failed).</li>
+                            <li><strong>Node structure</strong>: each node has a type (Start, AgentTask, HitlCheckpoint, Decision, Fork, Join, End) and outgoing edges with optional conditions.</li>
+                        </ul>
+                    }
+                    <a href="flows" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.flows"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Monitor & Templates -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>◈ @Loc["nav.agents"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">Monitora gli agenti attivi e gestisci i template per la loro creazione.</p>
+                        <ul class="small">
+                            <li><strong>Tab Agenti</strong>: visualizza tutti gli agenti in esecuzione con modello, token usati e sub-agenti.</li>
+                            <li><strong>Tab Template</strong>: crea template riutilizzabili con ruolo, modello LLM, max sub-agenti e gruppi skill.</li>
+                            <li><strong>Gruppi Skill</strong>: i template associano gruppi di skill agli agenti. Le skill con lo stesso <em>GroupId</em> vengono assegnate automaticamente.</li>
+                            <li><strong>System Prompt</strong>: ogni template può avere un prompt di sistema personalizzato che guida il comportamento dell'agente.</li>
+                            <li><strong>Filtro per Flow Run</strong>: filtra gli agenti per ID del flow run per debug.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">Monitor active agents and manage templates for their creation.</p>
+                        <ul class="small">
+                            <li><strong>Agents Tab</strong>: view all running agents with model, tokens used and sub-agents.</li>
+                            <li><strong>Templates Tab</strong>: create reusable templates with role, LLM model, max sub-agents and skill groups.</li>
+                            <li><strong>Skill Groups</strong>: templates link skill groups to agents. Skills with the same <em>GroupId</em> are auto-assigned.</li>
+                            <li><strong>System Prompt</strong>: each template can have a custom system prompt guiding the agent's behaviour.</li>
+                            <li><strong>Filter by Flow Run</strong>: filter agents by flow run ID for debugging.</li>
+                        </ul>
+                    }
+                    <a href="agents" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.agents"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- HITL -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>◉ @Loc["nav.review"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">La Coda di Revisione HITL (Human-in-the-Loop) gestisce i checkpoint che richiedono intervento umano.</p>
+                        <ul class="small">
+                            <li><strong>Tipi di checkpoint</strong>: Approval, Review, DataInput, MultiChoice, Veto.</li>
+                            <li><strong>Approva/Rifiuta</strong>: per checkpoint semplici. La decisione sblocca il flow run.</li>
+                            <li><strong>Scelte Multiple</strong>: per checkpoint MultiChoice, appare un pulsante per ogni opzione.</li>
+                            <li><strong>Escalate</strong>: invia il checkpoint a un supervisore superiore.</li>
+                            <li><strong>Scadenza</strong>: ogni checkpoint può avere un tempo limite visualizzato in rosso se imminente.</li>
+                            <li><strong>Decisioni Recenti</strong>: storico delle ultime 10 decisioni prese.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">The HITL (Human-in-the-Loop) Review Queue manages checkpoints requiring human intervention.</p>
+                        <ul class="small">
+                            <li><strong>Checkpoint types</strong>: Approval, Review, DataInput, MultiChoice, Veto.</li>
+                            <li><strong>Approve/Reject</strong>: for simple checkpoints. The decision unblocks the flow run.</li>
+                            <li><strong>Multiple Choices</strong>: for MultiChoice checkpoints, a button appears for each option.</li>
+                            <li><strong>Escalate</strong>: sends the checkpoint to a higher supervisor.</li>
+                            <li><strong>Expiry</strong>: each checkpoint can have a time limit shown in red when imminent.</li>
+                            <li><strong>Recent Decisions</strong>: history of the last 10 decisions made.</li>
+                        </ul>
+                    }
+                    <a href="hitl" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.review"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skills -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>✦ @Loc["nav.skills"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">Il registro skill gestisce le capacità disponibili agli agenti.</p>
+                        <ul class="small">
+                            <li><strong>Tipi</strong>: SlashCommand, McpTool, Prompt, Workflow.</li>
+                            <li><strong>Scope</strong>: Global (tutti), Group (un gruppo), Personal (un agente).</li>
+                            <li><strong>GroupId</strong>: identifica il gruppo. I template agente usano questo ID per assegnare skill.</li>
+                            <li><strong>Obbligatoria</strong>: se attiva, la skill viene assegnata automaticamente a tutti gli agenti compatibili.</li>
+                            <li><strong>Approva Proposte</strong>: gli agenti possono proporre nuove skill che appaiono in "In attesa di approvazione".</li>
+                            <li><strong>Crea Skill</strong>: gli amministratori possono creare skill direttamente come Active.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">The skill registry manages capabilities available to agents.</p>
+                        <ul class="small">
+                            <li><strong>Types</strong>: SlashCommand, McpTool, Prompt, Workflow.</li>
+                            <li><strong>Scope</strong>: Global (all), Group (a group), Personal (one agent).</li>
+                            <li><strong>GroupId</strong>: identifies the group. Agent templates use this ID to assign skills.</li>
+                            <li><strong>Mandatory</strong>: if active, the skill is auto-assigned to all compatible agents.</li>
+                            <li><strong>Approve Proposals</strong>: agents can propose new skills that appear in "Pending Approval".</li>
+                            <li><strong>Create Skill</strong>: admins can create skills directly as Active.</li>
+                        </ul>
+                    }
+                    <a href="skills" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.skills"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP Servers -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong>⬡ @Loc["nav.mcp"]</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted">I server MCP (Model Context Protocol) estendono le capacità degli agenti con tool esterni.</p>
+                        <ul class="small">
+                            <li><strong>Transport</strong>: Stdio, SSE o HTTP.</li>
+                            <li><strong>Stato</strong>: Active, Inactive, PendingApproval, Rejected.</li>
+                            <li><strong>Approva Server</strong>: i server proposti dagli agenti richiedono approvazione manuale.</li>
+                            <li><strong>Scopri Tool</strong>: per server attivi con endpoint, interroga la lista di tool disponibili.</li>
+                            <li><strong>Docker Image</strong>: i server containerizzati mostrano l'immagine Docker usata.</li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">MCP (Model Context Protocol) servers extend agent capabilities with external tools.</p>
+                        <ul class="small">
+                            <li><strong>Transport</strong>: Stdio, SSE or HTTP.</li>
+                            <li><strong>Status</strong>: Active, Inactive, PendingApproval, Rejected.</li>
+                            <li><strong>Approve Server</strong>: servers proposed by agents require manual approval.</li>
+                            <li><strong>Discover Tools</strong>: for active servers with an endpoint, queries the available tool list.</li>
+                            <li><strong>Docker Image</strong>: containerised servers show the Docker image used.</li>
+                        </ul>
+                    }
+                    <a href="mcp" class="btn btn-outline-primary btn-sm mt-2">@Loc["nav.mcp"] →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Architecture -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <strong>⚡ @Loc["home.title"] — @(Loc.Lang == "it" ? "Architettura" : "Architecture")</strong>
+                </div>
+                <div class="card-body">
+                    @if (Loc.Lang == "it")
+                    {
+                        <p class="small text-muted mb-2">Nox è una piattaforma di orchestrazione multi-agente costruita su:</p>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>ASP.NET Core 10</strong><br/><span class="text-muted">API + Blazor Dashboard</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>Microsoft Orleans 10</strong><br/><span class="text-muted">Actor model per agenti</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>PostgreSQL</strong><br/><span class="text-muted">Persistenza + clustering Orleans</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>Redis</strong><br/><span class="text-muted">Cache e pub/sub</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-2">Nox is a multi-agent orchestration platform built on:</p>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>ASP.NET Core 10</strong><br/><span class="text-muted">API + Blazor Dashboard</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>Microsoft Orleans 10</strong><br/><span class="text-muted">Actor model for agents</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>PostgreSQL</strong><br/><span class="text-muted">Persistence + Orleans clustering</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="p-2 rounded border text-center small">
+                                    <strong>Redis</strong><br/><span class="text-muted">Cache and pub/sub</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

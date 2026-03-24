@@ -4,88 +4,263 @@
 @using Nox.Domain.Agents
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
+@inherits NoxPageBase
 @inject NavigationManager Navigation
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IConfiguration Configuration
 @implements IAsyncDisposable
 
-<PageTitle>Agent Monitor — Nox</PageTitle>
+<PageTitle>@Loc["agents.title"] — Nox</PageTitle>
 
 <div class="container-fluid py-3">
-    <h2>🤖 Agent Monitor</h2>
-
-    <div class="mb-3">
-        <label class="form-label">Filter by Flow Run</label>
-        <input type="text" class="form-control w-auto d-inline-block" placeholder="Flow Run ID"
-               @bind="_filterRunId" @bind:event="oninput" />
-        <button class="btn btn-outline-secondary btn-sm ms-2" @onclick="Refresh">Refresh</button>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">◈ @Loc["agents.title"]</h2>
+        @if (_tab == "templates")
+        {
+            <button class="btn btn-primary btn-sm" @onclick="() => { _editingTemplate = null; _showTplModal = true; }">@Loc["agents.new_tpl"]</button>
+        }
+        else
+        {
+            <button class="btn btn-outline-secondary btn-sm" @onclick="Refresh">@Loc["refresh"]</button>
+        }
     </div>
 
-    @if (_agents.Count == 0)
-    {
-        <div class="alert alert-secondary">No agents found. Start a flow run to see agents here.</div>
-    }
-    else
-    {
-        <div class="row g-3">
-            @foreach (var agent in _agents)
-            {
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="card h-100 border-@GetStatusColor(agent.Status)">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>@agent.Name</strong>
-                                <span class="text-muted ms-1 small">(@agent.Role)</span>
-                            </div>
-                            <span class="badge bg-@GetStatusColor(agent.Status)">@agent.Status</span>
-                        </div>
-                        <div class="card-body">
-                            <div class="row text-center mb-2">
-                                <div class="col">
-                                    <div class="small text-muted">Model</div>
-                                    <strong class="small">@agent.Model</strong>
-                                </div>
-                                <div class="col">
-                                    <div class="small text-muted">Tokens</div>
-                                    <strong class="small">@agent.TokensUsed.ToString("N0")</strong>
-                                </div>
-                                <div class="col">
-                                    <div class="small text-muted">Sub-agents</div>
-                                    <strong class="small">@agent.CurrentSubAgentCount / @agent.MaxSubAgents</strong>
-                                </div>
-                            </div>
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(_tab == "agents" ? "active" : "")" @onclick='() => _tab = "agents"'>
+                @Loc["agents.tab_agents"]
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab == "templates" ? "active" : "")" @onclick='() => _tab = "templates"'>
+                @Loc["agents.tab_tpl"]
+            </button>
+        </li>
+    </ul>
 
-                            <!-- Token usage bar -->
-                            <div class="progress" style="height: 6px;" title="Token usage">
-                                @{
-                                    var pct = Math.Min(100, (agent.TokensUsed / 128_000.0) * 100);
-                                }
-                                <div class="progress-bar bg-@(pct > 80 ? "danger" : pct > 50 ? "warning" : "success")"
-                                     style="width: @pct%"></div>
-                            </div>
+    @if (_tab == "agents")
+    {
+        <div class="mb-3">
+            <label class="form-label small">@Loc["agents.filter"]</label>
+            <input type="text" class="form-control w-auto d-inline-block" placeholder="Flow Run ID"
+                   @bind="_filterRunId" @bind:event="oninput" />
+        </div>
 
-                            <div class="mt-2 small text-muted">
-                                Flow: <code>@agent.FlowRunId.ToString()[..8]…</code>
-                                @if (agent.ParentAgentId.HasValue)
-                                {
-                                    <span class="ms-2">↑ Parent: <code>@agent.ParentAgentId.Value.ToString()[..8]…</code></span>
-                                }
+        @if (_agents.Count == 0)
+        {
+            <div class="alert alert-secondary">@Loc["agents.no_data"]</div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var agent in _agents)
+                {
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="card h-100 border-@GetStatusColor(agent.Status)">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>@agent.Name</strong>
+                                    <span class="text-muted ms-1 small">(@agent.Role)</span>
+                                </div>
+                                <span class="badge bg-@GetStatusColor(agent.Status)">@agent.Status</span>
                             </div>
-                        </div>
-                        <div class="card-footer">
-                            <small class="text-muted">Created: @agent.CreatedAt.ToString("HH:mm:ss")</small>
+                            <div class="card-body">
+                                <div class="row text-center mb-2">
+                                    <div class="col">
+                                        <div class="small text-muted">@Loc["agents.model"]</div>
+                                        <strong class="small">@agent.Model</strong>
+                                    </div>
+                                    <div class="col">
+                                        <div class="small text-muted">@Loc["agents.tokens"]</div>
+                                        <strong class="small">@agent.TokensUsed.ToString("N0")</strong>
+                                    </div>
+                                    <div class="col">
+                                        <div class="small text-muted">@Loc["agents.subagents"]</div>
+                                        <strong class="small">@agent.CurrentSubAgentCount / @agent.MaxSubAgents</strong>
+                                    </div>
+                                </div>
+                                <div class="progress" style="height: 6px;" title="Token usage">
+                                    @{
+                                        var pct = Math.Min(100, (agent.TokensUsed / 128_000.0) * 100);
+                                    }
+                                    <div class="progress-bar bg-@(pct > 80 ? "danger" : pct > 50 ? "warning" : "success")"
+                                         style="width: @pct%"></div>
+                                </div>
+                                <div class="mt-2 small text-muted">
+                                    @Loc["agents.flow"]: <code>@agent.FlowRunId.ToString()[..8]…</code>
+                                    @if (agent.ParentAgentId.HasValue)
+                                    {
+                                        <span class="ms-2">↑ @Loc["agents.parent"]: <code>@agent.ParentAgentId.Value.ToString()[..8]…</code></span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <small class="text-muted">@Loc["agents.created"]: @agent.CreatedAt.ToString("HH:mm:ss")</small>
+                            </div>
                         </div>
                     </div>
-                </div>
-            }
-        </div>
+                }
+            </div>
+        }
+    }
+
+    @if (_tab == "templates")
+    {
+        @if (_templates.Count == 0)
+        {
+            <div class="alert alert-secondary">@Loc["agents.no_tpl"]</div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var tpl in _templates)
+                {
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>@tpl.Name</strong>
+                                    @if (tpl.IsGlobal)
+                                    {
+                                        <span class="badge bg-primary ms-1">Global</span>
+                                    }
+                                </div>
+                                <span class="badge bg-secondary">@tpl.DefaultModel</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="small text-muted mb-2">@Loc["agents.role"]: <strong>@tpl.Role</strong></div>
+                                @if (!string.IsNullOrEmpty(tpl.Description))
+                                {
+                                    <p class="small text-muted">@tpl.Description</p>
+                                }
+                                <div class="small mb-2">@Loc["agents.max_sub"]: <strong>@tpl.DefaultMaxSubAgents</strong></div>
+                                @if (tpl.SkillGroups.Count > 0)
+                                {
+                                    <div class="small mb-1 text-muted">@Loc["agents.skill_groups"]:</div>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var g in tpl.SkillGroups)
+                                        {
+                                            <span class="badge bg-light text-dark border">@g</span>
+                                        }
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(tpl.SystemPromptTemplate))
+                                {
+                                    <details class="mt-2">
+                                        <summary class="small text-muted">@Loc["agents.system_prompt"]</summary>
+                                        <pre class="small bg-light p-2 rounded mt-1" style="max-height:100px;overflow:auto">@tpl.SystemPromptTemplate</pre>
+                                    </details>
+                                }
+                            </div>
+                            <div class="card-footer d-flex justify-content-between align-items-center">
+                                <small class="text-muted">@tpl.CreatedAt.ToString("dd/MM/yy HH:mm")</small>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-primary btn-sm" @onclick="() => OpenEditTemplate(tpl)">@Loc["edit"]</button>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteTemplate(tpl.Id)">@Loc["delete"]</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
     }
 </div>
 
+@if (_showTplModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editingTemplate is null ? Loc["agents.new_tpl_title"] : Loc["edit"])</h5>
+                    <button class="btn-close" @onclick="CloseTplModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">@Loc["name"] *</label>
+                            <input class="form-control" @bind="_tplName" placeholder="es. Backend Developer" />
+                        </div>
+                        <div class="col">
+                            <label class="form-label">@Loc["agents.role"] *</label>
+                            <input class="form-control" @bind="_tplRole" placeholder="es. senior-backend" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["flows.desc"]</label>
+                        <textarea class="form-control" rows="2" @bind="_tplDesc"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">@Loc["agents.model"]</label>
+                            <select class="form-select" @bind="_tplModel">
+                                @foreach (var m in Enum.GetValues<LlmModel>())
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">@Loc["agents.max_sub"]</label>
+                            <input type="number" class="form-control" @bind="_tplMaxSub" min="1" max="20" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["agents.skill_groups"]</label>
+                        @if (_availableGroups.Count > 0)
+                        {
+                            <div class="mb-1 d-flex flex-wrap gap-1">
+                                @foreach (var g in _availableGroups)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                                            @onclick="() => AddGroup(g)">+@g</button>
+                                }
+                            </div>
+                        }
+                        <input class="form-control" @bind="_tplSkillGroupsInput"
+                               placeholder="es. dev-tools, code-review" />
+                        <div class="form-text">Separati da virgola. I gruppi determinano quali skill ha l'agente.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["agents.system_prompt"]</label>
+                        <textarea class="form-control" rows="4" @bind="_tplSystemPrompt"
+                                  placeholder="Sei un esperto sviluppatore backend..."></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="_tplIsGlobal" id="chkGlobal" />
+                        <label class="form-check-label small" for="chkGlobal">@Loc["agents.is_global"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseTplModal">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="SaveTemplate">@Loc["save"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
 @code {
     private List<Agent> _agents = [];
+    private List<AgentTemplate> _templates = [];
+    private List<string> _availableGroups = [];
     private string _filterRunId = string.Empty;
+    private string _tab = "agents";
     private HubConnection? _hubConnection;
+
+    // Template modal state
+    private bool _showTplModal;
+    private AgentTemplate? _editingTemplate;
+    private string _tplName = string.Empty;
+    private string _tplRole = string.Empty;
+    private string _tplDesc = string.Empty;
+    private LlmModel _tplModel = LlmModel.Claude4;
+    private int _tplMaxSub = 3;
+    private string _tplSkillGroupsInput = string.Empty;
+    private string _tplSystemPrompt = string.Empty;
+    private bool _tplIsGlobal = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -106,20 +281,114 @@
             InvokeAsync(async () => { await Refresh(); StateHasChanged(); }));
 
         try { await _hubConnection.StartAsync(); }
-        catch { /* hub is optional — page still works without real-time updates */ }
+        catch { /* hub is optional */ }
     }
 
     private async Task Refresh()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+
         var query = db.Agents.AsQueryable();
         if (Guid.TryParse(_filterRunId, out var runId))
             query = query.Where(a => a.FlowRunId == runId);
+        _agents = await query.OrderByDescending(a => a.CreatedAt).Take(50).ToListAsync();
 
-        _agents = await query
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(50)
+        _templates = await db.AgentTemplates.OrderBy(t => t.Name).ToListAsync();
+
+        _availableGroups = await db.Skills
+            .Where(s => s.GroupId != null)
+            .Select(s => s.GroupId!)
+            .Distinct()
+            .OrderBy(g => g)
             .ToListAsync();
+    }
+
+    private void AddGroup(string g)
+    {
+        var current = _tplSkillGroupsInput.Trim().TrimEnd(',');
+        _tplSkillGroupsInput = string.IsNullOrEmpty(current) ? g : $"{current}, {g}";
+    }
+
+    private void OpenEditTemplate(AgentTemplate tpl)
+    {
+        _editingTemplate = tpl;
+        _tplName = tpl.Name;
+        _tplRole = tpl.Role;
+        _tplDesc = tpl.Description ?? string.Empty;
+        _tplModel = tpl.DefaultModel;
+        _tplMaxSub = tpl.DefaultMaxSubAgents;
+        _tplSkillGroupsInput = string.Join(", ", tpl.SkillGroups);
+        _tplSystemPrompt = tpl.SystemPromptTemplate ?? string.Empty;
+        _tplIsGlobal = tpl.IsGlobal;
+        _showTplModal = true;
+    }
+
+    private void CloseTplModal()
+    {
+        _showTplModal = false;
+        _editingTemplate = null;
+        _tplName = _tplRole = _tplDesc = _tplSkillGroupsInput = _tplSystemPrompt = string.Empty;
+        _tplModel = LlmModel.Claude4;
+        _tplMaxSub = 3;
+        _tplIsGlobal = true;
+    }
+
+    private async Task SaveTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(_tplName) || string.IsNullOrWhiteSpace(_tplRole)) return;
+
+        var groups = _tplSkillGroupsInput
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct()
+            .ToList();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (_editingTemplate is not null)
+        {
+            var existing = await db.AgentTemplates.FindAsync(_editingTemplate.Id);
+            if (existing is not null)
+            {
+                existing.Name = _tplName;
+                existing.Role = _tplRole;
+                existing.Description = string.IsNullOrWhiteSpace(_tplDesc) ? null : _tplDesc;
+                existing.DefaultModel = _tplModel;
+                existing.DefaultMaxSubAgents = _tplMaxSub;
+                existing.SkillGroups = groups;
+                existing.SystemPromptTemplate = _tplSystemPrompt;
+                existing.IsGlobal = _tplIsGlobal;
+            }
+        }
+        else
+        {
+            db.AgentTemplates.Add(new AgentTemplate
+            {
+                Name = _tplName,
+                Role = _tplRole,
+                Description = string.IsNullOrWhiteSpace(_tplDesc) ? null : _tplDesc,
+                DefaultModel = _tplModel,
+                DefaultMaxSubAgents = _tplMaxSub,
+                SkillGroups = groups,
+                SystemPromptTemplate = _tplSystemPrompt,
+                IsGlobal = _tplIsGlobal,
+            });
+        }
+
+        await db.SaveChangesAsync();
+        CloseTplModal();
+        await Refresh();
+    }
+
+    private async Task DeleteTemplate(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tpl = await db.AgentTemplates.FindAsync(id);
+        if (tpl is not null)
+        {
+            db.AgentTemplates.Remove(tpl);
+            await db.SaveChangesAsync();
+        }
+        await Refresh();
     }
 
     private static string GetStatusColor(AgentStatus status) => status switch
@@ -134,6 +403,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        base.Dispose();
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
     }

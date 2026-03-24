@@ -67,7 +67,8 @@ try
             options.Audience  = authConfig["Audience"]  ?? "nox-api";
             options.RequireHttpsMetadata = bool.Parse(authConfig["RequireHttpsMetadata"] ?? "false");
             options.TokenValidationParameters.ValidateAudience = true;
-        });
+        })
+        .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>(ApiKeyAuthHandler.SchemeName, null);
 
     // Extract Keycloak realm_access.roles → ClaimTypes.Role
     builder.Services.AddSingleton<IClaimsTransformation, KeycloakRolesTransformer>();
@@ -75,14 +76,19 @@ try
     // ── Authorization — RBAC policies ────────────────────────────────────────
     builder.Services.AddAuthorization(options =>
     {
-        options.AddPolicy(NoxPolicies.AnyUser, p =>
-            p.RequireRole(NoxPolicies.RoleViewer, NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
+        var bothSchemes = new[] { JwtBearerDefaults.AuthenticationScheme, ApiKeyAuthHandler.SchemeName };
 
-        options.AddPolicy(NoxPolicies.ManagerOrAdmin, p =>
-            p.RequireRole(NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
+        options.AddPolicy(NoxPolicies.AnyUser, p => p
+            .AddAuthenticationSchemes(bothSchemes)
+            .RequireRole(NoxPolicies.RoleViewer, NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
 
-        options.AddPolicy(NoxPolicies.AdminOnly, p =>
-            p.RequireRole(NoxPolicies.RoleAdmin));
+        options.AddPolicy(NoxPolicies.ManagerOrAdmin, p => p
+            .AddAuthenticationSchemes(bothSchemes)
+            .RequireRole(NoxPolicies.RoleManager, NoxPolicies.RoleAdmin));
+
+        options.AddPolicy(NoxPolicies.AdminOnly, p => p
+            .AddAuthenticationSchemes(bothSchemes)
+            .RequireRole(NoxPolicies.RoleAdmin));
     });
 
     // ── Rate limiting ─────────────────────────────────────────────────────────

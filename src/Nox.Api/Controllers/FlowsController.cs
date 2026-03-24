@@ -84,6 +84,9 @@ public class FlowsController(
         var flow = await db.Flows.FindAsync(id);
         if (flow is null) return NotFound($"Flow {id} not found");
 
+        if (!flow.Graph.Nodes.Any(n => n.NodeType == NodeType.Start))
+            return BadRequest("Il grafo del flow non ha un nodo Start. Crea un nuovo flow dal designer.");
+
         var run = await flowService.StartRunAsync(new StartFlowRunCommand(id, req.Variables));
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }

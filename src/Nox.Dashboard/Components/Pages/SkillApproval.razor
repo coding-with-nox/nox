@@ -3,20 +3,24 @@
 @using Nox.Domain.Skills
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
+@inherits NoxPageBase
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject ISkillRegistry SkillRegistry
 @inject IHttpContextAccessor HttpContextAccessor
 
-<PageTitle>Skill Approval — Nox</PageTitle>
+<PageTitle>@Loc["skills.title"] — Nox</PageTitle>
 
 <div class="container-fluid py-3">
-    <h2>⚡ Skill Registry & Approval</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">✦ @Loc["skills.title"]</h2>
+        <button class="btn btn-primary btn-sm" @onclick="() => _showCreateModal = true">@Loc["skills.new"]</button>
+    </div>
 
     <!-- Pending Approvals -->
-    <h4 class="mt-3">Pending Approval</h4>
+    <h4 class="mt-3">@Loc["skills.pending"]</h4>
     @if (!_pendingSkills.Any())
     {
-        <div class="alert alert-info">No skills pending approval.</div>
+        <div class="alert alert-info">@Loc["skills.no_pend"]</div>
     }
     else
     {
@@ -32,16 +36,16 @@
                             <span class="badge bg-light text-dark me-1">@skill.Scope</span>
                             @if (skill.OwnerAgentId.HasValue)
                             {
-                                <span class="badge bg-info">Proposed by agent</span>
+                                <span class="badge bg-info">@Loc["mcp.proposed"]</span>
                             }
                         </div>
                         <div class="d-flex gap-2">
-                            <button class="btn btn-success btn-sm" @onclick="() => Approve(skill.Id)">Approve</button>
-                            <button class="btn btn-danger btn-sm" @onclick="() => Reject(skill.Id)">Reject</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => Approve(skill.Id)">@Loc["approve"]</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => Reject(skill.Id)">@Loc["reject"]</button>
                         </div>
                     </div>
                     <details class="mt-2">
-                        <summary class="small text-muted">Definition</summary>
+                        <summary class="small text-muted">@Loc["skills.def"]</summary>
                         <pre class="small bg-light p-2 rounded mt-1">@skill.Definition.ToJsonString(new System.Text.Json.JsonSerializerOptions{WriteIndented=true})</pre>
                     </details>
                 </div>
@@ -50,20 +54,21 @@
     }
 
     <!-- Active Skills -->
-    <h4 class="mt-4">Active Skills</h4>
+    <h4 class="mt-4">@Loc["skills.active"]</h4>
     <div class="mb-2">
-        <input type="text" class="form-control w-auto d-inline-block" placeholder="Filter by slug or name..."
+        <input type="text" class="form-control w-auto d-inline-block" placeholder="@Loc["skills.filter"]"
                @bind="_filter" @bind:event="oninput" />
     </div>
     <table class="table table-sm table-hover">
         <thead>
             <tr>
-                <th>Slug</th>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Scope</th>
-                <th>Status</th>
-                <th>Created</th>
+                <th>@Loc["skills.slug"]</th>
+                <th>@Loc["name"]</th>
+                <th>@Loc["type"]</th>
+                <th>@Loc["skills.scope"]</th>
+                <th>@Loc["status"]</th>
+                <th>@Loc["created"]</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -76,16 +81,155 @@
                     <td><span class="badge bg-light text-dark">@skill.Scope</span></td>
                     <td><span class="badge bg-@GetStatusColor(skill.Status)">@skill.Status</span></td>
                     <td>@skill.CreatedAt.ToString("dd/MM/yy")</td>
+                    <td class="text-end text-nowrap">
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => OpenEditSkill(skill)">@Loc["edit"]</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteSkill(skill.Id)">@Loc["delete"]</button>
+                    </td>
                 </tr>
             }
         </tbody>
     </table>
 </div>
 
+@if (_showCreateModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Loc["skills.new_title"]</h5>
+                    <button class="btn-close" @onclick="() => _showCreateModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["name"] *</label>
+                        <input class="form-control" @bind="_newName" placeholder="es. Analisi Codice" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["skills.slug"] *</label>
+                        <input class="form-control" @bind="_newSlug" placeholder="es. analisi-codice" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["flows.desc"]</label>
+                        <textarea class="form-control" rows="2" @bind="_newDesc"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">@Loc["type"]</label>
+                            <select class="form-select" @bind="_newType">
+                                @foreach (var t in Enum.GetValues<SkillType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">@Loc["skills.scope"]</label>
+                            <select class="form-select" @bind="_newScope">
+                                @foreach (var s in Enum.GetValues<SkillScope>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["skills.group"]</label>
+                        <input class="form-control" @bind="_newGroupId" placeholder="es. dev-tools" />
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" @bind="_newIsMandatory" id="chkMandatory" />
+                        <label class="form-check-label small" for="chkMandatory">@Loc["skills.mandatory"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _showCreateModal = false">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="CreateSkill">@Loc["flows.create"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@if (_editingSkill is not null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Loc["edit"]: @_editingSkill.Name</h5>
+                    <button class="btn-close" @onclick="() => _editingSkill = null"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["name"] *</label>
+                        <input class="form-control" @bind="_editName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["flows.desc"]</label>
+                        <textarea class="form-control" rows="2" @bind="_editDesc"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">@Loc["type"]</label>
+                            <select class="form-select" @bind="_editType">
+                                @foreach (var t in Enum.GetValues<SkillType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">@Loc["skills.scope"]</label>
+                            <select class="form-select" @bind="_editScope">
+                                @foreach (var s in Enum.GetValues<SkillScope>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">@Loc["skills.group"]</label>
+                        <input class="form-control" @bind="_editGroupId" />
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" @bind="_editIsMandatory" id="chkEditMandatory" />
+                        <label class="form-check-label small" for="chkEditMandatory">@Loc["skills.mandatory"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _editingSkill = null">@Loc["cancel"]</button>
+                    <button class="btn btn-primary" @onclick="SaveEditSkill">@Loc["save"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
 @code {
     private List<Skill> _skills = [];
     private List<Skill> _pendingSkills = [];
     private string _filter = string.Empty;
+    private bool _showCreateModal;
+    private string _newName = string.Empty;
+    private string _newSlug = string.Empty;
+    private string _newDesc = string.Empty;
+    private string _newGroupId = string.Empty;
+    private SkillType _newType = SkillType.SlashCommand;
+    private SkillScope _newScope = SkillScope.Global;
+    private bool _newIsMandatory;
+
+    // Edit state
+    private Skill? _editingSkill;
+    private string _editName = string.Empty;
+    private string _editDesc = string.Empty;
+    private string _editGroupId = string.Empty;
+    private SkillType _editType = SkillType.SlashCommand;
+    private SkillScope _editScope = SkillScope.Global;
+    private bool _editIsMandatory;
     private string CurrentUser => HttpContextAccessor.HttpContext?.User.Identity?.Name ?? "dashboard-operator";
 
     private IEnumerable<Skill> FilteredActiveSkills => _skills
@@ -115,6 +259,71 @@
     private async Task Reject(Guid id)
     {
         await SkillRegistry.RejectSkillAsync(id, CurrentUser, "Rejected via dashboard");
+        await Reload();
+    }
+
+    private async Task CreateSkill()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newSlug)) return;
+        var skill = new Skill
+        {
+            Name = _newName,
+            Slug = _newSlug.ToLower().Trim().Replace(' ', '-'),
+            Description = string.IsNullOrWhiteSpace(_newDesc) ? null : _newDesc,
+            Type = _newType,
+            Scope = _newScope,
+            GroupId = string.IsNullOrWhiteSpace(_newGroupId) ? null : _newGroupId.Trim(),
+            IsMandatory = _newIsMandatory,
+            Status = SkillStatus.Active,
+        };
+        await SkillRegistry.RegisterAsync(skill);
+        _showCreateModal = false;
+        _newName = _newSlug = _newDesc = _newGroupId = string.Empty;
+        _newType = SkillType.SlashCommand;
+        _newScope = SkillScope.Global;
+        _newIsMandatory = false;
+        await Reload();
+    }
+
+    private void OpenEditSkill(Skill skill)
+    {
+        _editingSkill = skill;
+        _editName = skill.Name;
+        _editDesc = skill.Description ?? string.Empty;
+        _editType = skill.Type;
+        _editScope = skill.Scope;
+        _editGroupId = skill.GroupId ?? string.Empty;
+        _editIsMandatory = skill.IsMandatory;
+    }
+
+    private async Task SaveEditSkill()
+    {
+        if (_editingSkill is null || string.IsNullOrWhiteSpace(_editName)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var existing = await db.Skills.FindAsync(_editingSkill.Id);
+        if (existing is not null)
+        {
+            existing.Name = _editName;
+            existing.Description = string.IsNullOrWhiteSpace(_editDesc) ? null : _editDesc;
+            existing.Type = _editType;
+            existing.Scope = _editScope;
+            existing.GroupId = string.IsNullOrWhiteSpace(_editGroupId) ? null : _editGroupId.Trim();
+            existing.IsMandatory = _editIsMandatory;
+            await db.SaveChangesAsync();
+        }
+        _editingSkill = null;
+        await Reload();
+    }
+
+    private async Task DeleteSkill(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var skill = await db.Skills.FindAsync(id);
+        if (skill is not null)
+        {
+            db.Skills.Remove(skill);
+            await db.SaveChangesAsync();
+        }
         await Reload();
     }
 

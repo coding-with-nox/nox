@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nox.Dashboard.Components;
+using Nox.Dashboard.Services;
 using Nox.Domain;
 using Nox.Domain.Flows;
 using Nox.Domain.Hitl;
@@ -8,6 +9,11 @@ using Nox.Infrastructure;
 using Nox.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Persist Data Protection keys so antiforgery tokens survive container restarts
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/dataprotection-keys"))
+    .SetApplicationName("nox-dashboard");
 
 // Add Razor components with interactive server rendering
 builder.Services.AddRazorComponents()
@@ -20,6 +26,9 @@ builder.Services.AddNoxInfrastructure(builder.Configuration);
 builder.Services.AddHttpClient("NoxApi", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Nox:ApiBaseUrl"] ?? "http://localhost:5000");
+    var apiKey = builder.Configuration["Nox:InternalApiKey"];
+    if (!string.IsNullOrEmpty(apiKey))
+        client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
 });
 
 // Flow engine (HTTP client to Nox.Api)
@@ -27,6 +36,8 @@ builder.Services.AddScoped<IFlowEngine, DashboardFlowEngineProxy>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<ThemeService>();
+builder.Services.AddScoped<LanguageService>();
 
 var app = builder.Build();
 

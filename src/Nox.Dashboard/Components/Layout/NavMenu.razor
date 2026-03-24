@@ -1,87 +1,168 @@
 @using Nox.Domain.Hitl
 @using Nox.Domain.Skills
+@using Nox.Domain.Flows
+@using Nox.Domain.Agents
 @using Nox.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<NoxDbContext> DbFactory
-@implements IDisposable
+@inject ThemeService Theme
+@inject LanguageService Loc
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="">⚡ Nox</a>
-    </div>
+<div class="nav-top">
+    <a class="nav-brand" href="">
+        <div class="nav-brand-icon">⚡</div>
+        <div class="nav-brand-text">
+            <span class="nav-brand-name">Nox</span>
+            <span class="nav-brand-sub">Orchestration Platform</span>
+        </div>
+    </a>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<input type="checkbox" title="Menu" class="navbar-toggler" />
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                🏠 Dashboard
-            </NavLink>
-        </div>
+<div class="nav-scrollable-mobile nav-scrollable">
 
-        <div class="nav-item px-3 mt-2">
-            <small class="text-muted px-1">ORCHESTRATION</small>
-        </div>
+    <div class="nav-section">@Loc["nav.orchestration"]</div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="flows">
-                🔀 Flow Designer
-            </NavLink>
-        </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            <span class="nav-icon">⊞</span>
+            @Loc["nav.dashboard"]
+        </NavLink>
+    </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="agents">
-                🤖 Agent Monitor
-            </NavLink>
-        </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="flows">
+            <span class="nav-icon">⇄</span>
+            @Loc["nav.flows"]
+        </NavLink>
+    </div>
 
-        <div class="nav-item px-3 mt-2">
-            <small class="text-muted px-1">HUMAN-IN-THE-LOOP</small>
-        </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="agents">
+            <span class="nav-icon">◈</span>
+            @Loc["nav.agents"]
+        </NavLink>
+    </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link d-flex justify-content-between align-items-center" href="hitl">
-                <span>🧑‍💼 Review Queue</span>
-                @if (_pendingCheckpoints > 0)
-                {
-                    <span class="badge bg-danger ms-1">@_pendingCheckpoints</span>
-                }
-            </NavLink>
-        </div>
+    <div class="nav-section">@Loc["nav.hitl_section"]</div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link d-flex justify-content-between align-items-center" href="skills">
-                <span>⚡ Skill Approval</span>
-                @if (_pendingSkills > 0)
-                {
-                    <span class="badge bg-warning text-dark ms-1">@_pendingSkills</span>
-                }
-            </NavLink>
-        </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="hitl">
+            <span class="nav-icon">◉</span>
+            @Loc["nav.review"]
+            @if (_pendingCheckpoints > 0)
+            {
+                <span class="nav-badge bg-danger text-white">@_pendingCheckpoints</span>
+            }
+        </NavLink>
+    </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="mcp">
-                🔌 MCP Servers
-            </NavLink>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="skills">
+            <span class="nav-icon">✦</span>
+            @Loc["nav.skills"]
+            @if (_pendingSkills > 0)
+            {
+                <span class="nav-badge bg-warning text-white">@_pendingSkills</span>
+            }
+        </NavLink>
+    </div>
+
+    <div class="nav-section">@Loc["nav.infra"]</div>
+
+    <div class="nav-item">
+        <NavLink class="nav-link" href="mcp">
+            <span class="nav-icon">⬡</span>
+            @Loc["nav.mcp"]
+        </NavLink>
+    </div>
+
+    <div class="nav-section">@Loc["nav.docs"]</div>
+
+    <div class="nav-item">
+        <NavLink class="nav-link" href="wiki">
+            <span class="nav-icon">📖</span>
+            @Loc["nav.wiki"]
+        </NavLink>
+    </div>
+
+    <div class="nav-monitor">
+        <div class="nav-monitor-title">@Loc["nav.monitor"]</div>
+        <div class="monitor-row">
+            <span class="monitor-dot @(_runningFlows > 0 ? "dot-active" : "dot-idle")"></span>
+            <span class="monitor-label">@_runningFlows @Loc["mon.flows"]</span>
         </div>
-    </nav>
+        <div class="monitor-row">
+            <span class="monitor-dot @(_activeAgents > 0 ? "dot-active" : "dot-idle")"></span>
+            <span class="monitor-label">@_activeAgents @Loc["mon.agents"]</span>
+        </div>
+        <div class="monitor-row">
+            <span class="monitor-dot @(_pendingCheckpoints > 0 ? "dot-warn" : "dot-idle")"></span>
+            <span class="monitor-label">@_pendingCheckpoints @Loc["mon.hitl"]</span>
+        </div>
+        <div class="monitor-row">
+            <span class="monitor-dot @(_pendingSkills > 0 ? "dot-warn" : "dot-idle")"></span>
+            <span class="monitor-label">@_pendingSkills @Loc["mon.skills"]</span>
+        </div>
+    </div>
+
+    <div class="nav-footer">
+        <div class="nav-controls">
+            <button class="ctrl-btn" title="@(Theme.IsDark ? "Light mode" : "Dark mode")" @onclick="ToggleTheme">
+                @(Theme.IsDark ? "☀" : "☾")
+            </button>
+            <button class="ctrl-btn lang-btn" @onclick="ToggleLang">
+                @Loc.Lang.ToUpper()
+            </button>
+        </div>
+        <div class="nav-footer-text">@Loc["nav.footer"]</div>
+    </div>
+
 </div>
 
 @code {
     private int _pendingCheckpoints;
     private int _pendingSkills;
+    private int _runningFlows;
+    private int _activeAgents;
     private Timer? _timer;
 
     protected override async Task OnInitializedAsync()
     {
+        Loc.OnChange += OnServiceChanged;
+        Theme.OnChange += OnServiceChanged;
         await LoadCounts();
         _timer = new Timer(_ => InvokeAsync(async () =>
         {
             await LoadCounts();
             StateHasChanged();
         }), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var savedTheme = await JS.InvokeAsync<string>("noxTheme.init");
+        Theme.Set(savedTheme);
+        var savedLang = await JS.InvokeAsync<string>("noxLang.init");
+        Loc.Set(savedLang);
+    }
+
+    private void OnServiceChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ToggleTheme()
+    {
+        Theme.Toggle();
+        await JS.InvokeVoidAsync("noxTheme.set", Theme.Current);
+    }
+
+    private async Task ToggleLang()
+    {
+        Loc.Toggle();
+        await JS.InvokeVoidAsync("noxLang.set", Loc.Lang);
     }
 
     private async Task LoadCounts()
@@ -91,9 +172,17 @@
             await using var db = await DbFactory.CreateDbContextAsync();
             _pendingCheckpoints = await db.HitlCheckpoints.CountAsync(h => h.Status == CheckpointStatus.Pending);
             _pendingSkills = await db.Skills.CountAsync(s => s.Status == SkillStatus.PendingApproval);
+            _runningFlows  = await db.FlowRuns.CountAsync(r => r.Status == FlowRunStatus.Running || r.Status == FlowRunStatus.Paused);
+            _activeAgents  = await db.Agents.CountAsync(a => a.Status == AgentStatus.Running || a.Status == AgentStatus.WaitingForHitl);
         }
         catch { /* DB might not be ready yet */ }
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public ValueTask DisposeAsync()
+    {
+        Loc.OnChange -= OnServiceChanged;
+        Theme.OnChange -= OnServiceChanged;
+        _timer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
 }

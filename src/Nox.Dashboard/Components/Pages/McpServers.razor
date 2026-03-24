@@ -2,16 +2,17 @@
 @using Microsoft.EntityFrameworkCore
 @using Nox.Domain.Mcp
 @using Nox.Infrastructure.Persistence
+@inherits NoxPageBase
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IMcpClientManager McpManager
 @inject IHttpContextAccessor HttpContextAccessor
 
-<PageTitle>MCP Servers — Nox</PageTitle>
+<PageTitle>@Loc["mcp.title"] — Nox</PageTitle>
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🔌 MCP Servers</h2>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="Refresh">↺ Refresh</button>
+        <h2>⬡ @Loc["mcp.title"]</h2>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Refresh">@Loc["refresh"]</button>
     </div>
 
     <!-- Status filter -->
@@ -25,13 +26,13 @@
         }
         <button class="btn btn-sm @(_statusFilter == null ? "btn-primary" : "btn-outline-secondary")"
                 @onclick="() => { _statusFilter = null; }">
-            All (@_servers.Count)
+            @Loc["mcp.all"] (@_servers.Count)
         </button>
     </div>
 
     @if (_filteredServers.Count == 0)
     {
-        <div class="alert alert-secondary">No MCP servers found.</div>
+        <div class="alert alert-secondary">@Loc["mcp.no_data"]</div>
     }
     else
     {
@@ -55,25 +56,25 @@
                             }
                             @if (srv.EndpointUrl is not null)
                             {
-                                <div class="small"><strong>Endpoint:</strong> <code>@srv.EndpointUrl</code></div>
+                                <div class="small"><strong>@Loc["mcp.endpoint"]:</strong> <code>@srv.EndpointUrl</code></div>
                             }
                             @if (srv.DockerImage is not null)
                             {
-                                <div class="small"><strong>Image:</strong> <code>@srv.DockerImage</code></div>
+                                <div class="small"><strong>@Loc["mcp.image"]:</strong> <code>@srv.DockerImage</code></div>
                             }
                             @if (srv.ProposedByAgentId.HasValue)
                             {
-                                <div class="small text-muted mt-1">Proposed by agent: <code>@srv.ProposedByAgentId.Value.ToString()[..8]</code></div>
+                                <div class="small text-muted mt-1">@Loc["mcp.proposed"]: <code>@srv.ProposedByAgentId.Value.ToString()[..8]</code></div>
                             }
                             @if (srv.ApprovedBy is not null)
                             {
-                                <div class="small text-muted">Approved by: @srv.ApprovedBy</div>
+                                <div class="small text-muted">@Loc["mcp.approved_by"]: @srv.ApprovedBy</div>
                             }
 
                             @if (_toolsCache.TryGetValue(srv.Id, out var tools) && tools.Count > 0)
                             {
                                 <div class="mt-2">
-                                    <small class="text-muted">Tools (@tools.Count):</small>
+                                    <small class="text-muted">@Loc["mcp.tools"] (@tools.Count):</small>
                                     <div class="d-flex flex-wrap gap-1 mt-1">
                                         @foreach (var t in tools)
                                         {
@@ -87,16 +88,16 @@
                             @if (srv.Status == McpServerStatus.PendingApproval)
                             {
                                 <button class="btn btn-success btn-sm" @onclick="() => Approve(srv.Id)">
-                                    ✓ Approve
+                                    @Loc["approve"]
                                 </button>
                                 <button class="btn btn-danger btn-sm" @onclick="() => Reject(srv.Id)">
-                                    ✗ Reject
+                                    @Loc["reject"]
                                 </button>
                             }
                             @if (srv.Status == McpServerStatus.Active && srv.EndpointUrl is not null)
                             {
                                 <button class="btn btn-outline-info btn-sm" @onclick="() => DiscoverTools(srv.Id)">
-                                    🔍 Discover Tools
+                                    @Loc["mcp.discover"]
                                 </button>
                             }
                         </div>

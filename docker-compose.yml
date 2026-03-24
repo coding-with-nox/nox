@@ -116,6 +116,7 @@ services:
       Nox__Auth__Authority: "http://keycloak:8080/realms/nox"
       Nox__Cors__AllowedOrigins__0: "http://localhost:5152"
       Nox__Llm__Providers__Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+      Nox__InternalApiKey: "nox-dashboard-internal-key"
       SEQ_URL: "http://seq:5341"
     depends_on:
       postgres:
@@ -143,6 +144,9 @@ services:
       Nox__Qdrant__Host: qdrant
       Nox__Qdrant__Port: "6334"
       Nox__Qdrant__ApiKey: ${QDRANT_API_KEY}
+      Nox__InternalApiKey: "nox-dashboard-internal-key"
+    volumes:
+      - dashboard_dp_keys:/app/dataprotection-keys
     depends_on:
       - api
 
@@ -152,3 +156,4 @@ volumes:
   redis_data:
   qdrant_data:
   seq_data:
+  dashboard_dp_keys:
