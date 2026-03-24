@@ -86,8 +86,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
     container_name: nox-keycloak
-    entrypoint: ["/bin/sh", "/opt/keycloak/scripts/docker-entrypoint.sh"]
-    command: ["start-dev", "--import-realm"]
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /opt/keycloak/data/import && sed 's/__KEYCLOAK_CLIENT_SECRET__/'\"$$KEYCLOAK_CLIENT_SECRET\"'/g' /opt/keycloak/scripts/nox-realm-template.json > /opt/keycloak/data/import/nox-realm.json && exec /opt/keycloak/bin/kc.sh start-dev --import-realm"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -99,7 +98,6 @@ services:
       - "8080:8080"
     volumes:
       - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/scripts/nox-realm-template.json:ro
-      - ./infrastructure/keycloak/docker-entrypoint.sh:/opt/keycloak/scripts/docker-entrypoint.sh:ro
 
   # ── Applications ──────────────────────────────────────────────────────────────
 

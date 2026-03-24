@@ -129,8 +129,8 @@ try
     app.UseAuthorization();
     app.UseAntiforgery();
 
-    // ── Login endpoint — triggers OIDC challenge ───────────────────────
-    app.MapGet("/login", (HttpContext ctx, string? returnUrl) =>
+    // ── OIDC challenge endpoint (called by Login.razor) ───────────────
+    app.MapGet("/auth/login", (HttpContext ctx, string? returnUrl) =>
         ctx.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
             new AuthenticationProperties { RedirectUri = returnUrl ?? "/" }))
         .AllowAnonymous();
