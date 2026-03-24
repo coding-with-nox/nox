@@ -47,15 +47,21 @@ public static class SdlcSeed
 
     // ── Skills ────────────────────────────────────────────────────────────────
 
+    private static readonly string[] CommandSlugs =
+    [
+        "docs", "code-review", "summarize", "test-plan", "propose-skill"
+    ];
+
     private static async Task SeedSkillsAsync(NoxDbContext db)
     {
-        var existing = await db.Skills
+        // ── GitHub skills: insert-only (execution handled by GitHubToolHandler) ──
+        var existingGh = await db.Skills
             .Where(s => GitHubSlugs.Contains(s.Slug))
             .Select(s => s.Slug)
             .ToListAsync();
 
         var toInsert = new List<Skill>();
-        void Add(string slug, string name, string desc) =>
+        void AddGh(string slug, string name, string desc) =>
             toInsert.Add(new Skill
             {
                 Slug        = slug,
@@ -69,41 +75,297 @@ public static class SdlcSeed
                 Definition  = new JsonObject { ["group"] = "github" }
             });
 
-        if (!existing.Contains("github-read-issue"))
-            Add("github-read-issue",    "GitHub: Read Issue",    "Read a GitHub issue by number — returns title, body, state, labels.");
-        if (!existing.Contains("github-create-branch"))
-            Add("github-create-branch", "GitHub: Create Branch", "Create a new branch in the repository from a specified base branch.");
-        if (!existing.Contains("github-read-file"))
-            Add("github-read-file",     "GitHub: Read File",     "Read the content of a file or list a directory from the repository.");
-        if (!existing.Contains("github-write-file"))
-            Add("github-write-file",    "GitHub: Write File",    "Create or update a file on the working branch with a commit message.");
-        if (!existing.Contains("github-list-files"))
-            Add("github-list-files",    "GitHub: List Files",    "List files and directories at a given path in the repository.");
-        if (!existing.Contains("github-create-pr"))
-            Add("github-create-pr",     "GitHub: Create PR",     "Create a pull request from the working branch to the base branch.");
+        if (!existingGh.Contains("github-read-issue"))
+            AddGh("github-read-issue",    "GitHub: Read Issue",    "Read a GitHub issue by number — returns title, body, state, labels.");
+        if (!existingGh.Contains("github-create-branch"))
+            AddGh("github-create-branch", "GitHub: Create Branch", "Create a new branch in the repository from a specified base branch.");
+        if (!existingGh.Contains("github-read-file"))
+            AddGh("github-read-file",     "GitHub: Read File",     "Read the content of a file or list a directory from the repository.");
+        if (!existingGh.Contains("github-write-file"))
+            AddGh("github-write-file",    "GitHub: Write File",    "Create or update a file on the working branch with a commit message.");
+        if (!existingGh.Contains("github-list-files"))
+            AddGh("github-list-files",    "GitHub: List Files",    "List files and directories at a given path in the repository.");
+        if (!existingGh.Contains("github-create-pr"))
+            AddGh("github-create-pr",     "GitHub: Create PR",     "Create a pull request from the working branch to the base branch.");
 
         if (toInsert.Count > 0)
-        {
             db.Skills.AddRange(toInsert);
-            await db.SaveChangesAsync();
+
+        // ── Slash-command skills: upsert with rich prompt templates ──────────────
+        var existingCmd = await db.Skills
+            .Where(s => CommandSlugs.Contains(s.Slug))
+            .ToListAsync();
+
+        void UpsertCmd(string slug, string name, string shortDesc, string promptTemplate)
+        {
+            var found = existingCmd.FirstOrDefault(s => s.Slug == slug);
+            var def = new JsonObject { ["promptTemplate"] = promptTemplate };
+            if (found is null)
+            {
+                db.Skills.Add(new Skill
+                {
+                    Slug        = slug,
+                    Name        = name,
+                    Description = shortDesc,
+                    Type        = SkillType.SlashCommand,
+                    Scope       = SkillScope.Global,
+                    IsMandatory = false,
+                    Status      = SkillStatus.Active,
+                    Definition  = def
+                });
+            }
+            else
+            {
+                found.Name        = name;
+                found.Description = shortDesc;
+                found.Definition  = def;
+                found.UpdatedAt   = DateTimeOffset.UtcNow;
+            }
         }
+
+        UpsertCmd(
+            "docs",
+            "Generate Documentation",
+            "Generate exhaustive technical documentation for the provided code: API, parameters, examples, architecture notes.",
+            """
+            You are a Senior Technical Writer with deep software engineering expertise.
+            Your task is to generate exhaustive, developer-grade documentation for the code or component provided.
+
+            Documentation MUST include ALL of the following sections:
+
+            ## Overview
+            A clear, concise description of the module/component purpose, its responsibility within the system, and the architectural layer it belongs to (e.g., domain, application, infrastructure, presentation).
+
+            ## Public API
+            For every public class, method, function, or endpoint:
+            - **Signature**: full typed signature
+            - **Purpose**: what it does and why it exists
+            - **Parameters**: name, type, description, constraints, whether optional or required
+            - **Return value**: type, shape, and semantics (including null/undefined cases)
+            - **Exceptions / errors**: what can be thrown and under what conditions
+            - **Side effects**: database writes, cache invalidations, events published, external calls
+
+            ## Data Models
+            Document all DTOs, domain entities, and value objects: field names, types, invariants, validation rules.
+
+            ## Usage Examples
+            At least 2 realistic, copy-pasteable code examples showing happy path and a non-trivial edge case.
+
+            ## Dependencies & Integration Points
+            List external services, interfaces, or modules this component depends on. Note injection points and configuration keys.
+
+            ## Known Limitations & Edge Cases
+            Explicitly call out any non-obvious behaviour, thread-safety considerations, performance hotspots, or gotchas a maintainer must know.
+
+            ## Changelog
+            If version history is available, summarise key breaking changes.
+
+            Output format: GitHub-flavored Markdown. Use fenced code blocks with language tags. Be precise, factual, and avoid padding.
+            """);
+
+        UpsertCmd(
+            "code-review",
+            "Code Review",
+            "Perform a thorough, senior-level code review covering correctness, security, performance, and maintainability.",
+            """
+            You are a Principal Engineer conducting a formal code review. Your review must be thorough, constructive, and actionable. Evaluate the provided code across ALL of the following dimensions:
+
+            ## Correctness
+            - Logic errors, off-by-one errors, null/undefined dereferences
+            - Incorrect assumptions about inputs or external system behaviour
+            - Race conditions, concurrency issues, improper resource disposal
+            - Missing or incorrect error propagation
+
+            ## Security
+            - Injection vulnerabilities: SQL, command, LDAP, XSS, SSTI
+            - Authentication/authorisation bypass risks
+            - Secrets or credentials in code or logs
+            - Insecure deserialization, path traversal, SSRF
+            - Sensitive data logged or exposed in error messages
+
+            ## Performance
+            - N+1 query patterns, missing indexes, unbounded queries
+            - Unnecessary allocations, boxing, string concatenation in hot paths
+            - Synchronous I/O blocking async threads
+            - Missing caching for expensive idempotent operations
+            - Inefficient algorithms (O(n²) where O(n log n) exists)
+
+            ## Design & Maintainability
+            - Adherence to SOLID principles; single responsibility violations
+            - Cohesion, coupling, and dependency direction
+            - Magic numbers, unclear naming, misleading comments
+            - Code duplication that should be extracted
+            - Overly deep nesting or complex branching that hurts readability
+
+            ## Test Coverage
+            - Missing unit tests for critical paths
+            - Tests that don't assert meaningful behaviour (vacuous tests)
+            - Lack of edge-case and error-path coverage
+
+            ## Output format
+            For each issue found:
+            - **Severity**: Critical / Major / Minor / Suggestion
+            - **Location**: file and line number if available
+            - **Problem**: concise description
+            - **Recommended fix**: concrete code snippet or pattern
+
+            End with a **Summary** section: overall quality score (1–10), top 3 priorities, and a go/no-go recommendation.
+            """);
+
+        UpsertCmd(
+            "summarize",
+            "Summarize",
+            "Produce a structured, information-dense summary capturing decisions, risks, open questions, and action items.",
+            """
+            You are a Senior Analyst skilled at distilling complex information into clear, structured summaries. Your task is to produce a concise yet information-dense summary of the provided content.
+
+            The summary MUST be structured as follows:
+
+            ## Executive Summary (3–5 sentences)
+            The "so what" — the most important takeaway a decision-maker needs to understand without reading further.
+
+            ## Key Decisions Made
+            Bullet list. For each decision: what was decided, who decided it (if known), and the rationale.
+
+            ## Key Findings / Outcomes
+            Concrete facts, measurements, or results. Avoid vague language. If numbers are present, preserve them.
+
+            ## Risks & Issues Identified
+            Each risk: description, likelihood (High/Medium/Low), impact (High/Medium/Low), and any mitigations mentioned.
+
+            ## Open Questions & Blockers
+            Items that require a decision or action before work can proceed. Owner if mentioned.
+
+            ## Action Items
+            Concrete next steps. Format: [Owner if known] — action — deadline if mentioned.
+
+            ## Context & Background (optional)
+            Only if relevant information would otherwise be lost: brief explanation of the domain or prior state.
+
+            Rules:
+            - Use bullet points and headers; no prose walls
+            - Preserve technical terms exactly as written
+            - If the content is code, summarise its purpose, interfaces, and side effects rather than transcribing it
+            - Flag any information that appears contradictory or ambiguous
+            - Output in GitHub-flavored Markdown
+            """);
+
+        UpsertCmd(
+            "test-plan",
+            "Generate Test Plan",
+            "Generate a rigorous, executable test plan with unit, integration, and edge-case scenarios and clear acceptance criteria.",
+            """
+            You are a Senior QA Engineer and Test Architect. Generate a rigorous, executable test plan for the feature or component described. The plan must be detailed enough that a developer with no prior context can implement every test case.
+
+            ## Feature Under Test
+            Restate the feature/component scope in one paragraph, clarifying what IS and IS NOT in scope.
+
+            ## Test Strategy
+            - Testing levels: Unit / Integration / Contract / End-to-End (which apply and why)
+            - Test isolation strategy: what to mock, stub, or fake and why
+            - Test data management: fixtures, factories, database seeding approach
+            - Coverage target: minimum acceptable line/branch coverage %
+
+            ## Unit Test Cases
+            For each logical unit (function, method, class):
+            | Test ID | Scenario | Input | Expected Output | Edge Cases |
+            |---------|----------|-------|-----------------|------------|
+            Include: happy path, boundary values, null/empty inputs, type mismatches, exception paths.
+
+            ## Integration Test Cases
+            For each integration boundary (API endpoint, DB query, external service call):
+            - Scenario description
+            - Setup: required state, seed data, mocked dependencies
+            - Steps
+            - Assertions: response codes, body shape, DB state, events published
+
+            ## Edge Cases & Non-Happy Paths
+            Explicitly list: concurrent access scenarios, timeout/retry behaviour, partial failures, large payloads, empty collections, expired tokens.
+
+            ## Acceptance Criteria (Given/When/Then)
+            One Gherkin-style scenario per key user story.
+
+            ## Performance & Load Considerations
+            If applicable: expected throughput, latency SLOs, load test thresholds.
+
+            ## Definition of Done
+            Checklist a PR must satisfy before the test plan is considered fulfilled.
+            """);
+
+        UpsertCmd(
+            "propose-skill",
+            "Propose New Skill",
+            "Create a complete, well-justified skill proposal for HITL approval, covering slug, description, prompt template, scope, and rationale.",
+            """
+            You are a Platform Engineer responsible for extending the Nox agent skill registry. When asked to propose a new skill, produce a complete, structured proposal that gives the human approver everything they need to evaluate and approve it.
+
+            The proposal MUST contain ALL of the following fields:
+
+            ## Skill Identity
+            - **slug**: kebab-case, globally unique, descriptive (e.g., `static-analysis`, `db-schema-diff`)
+            - **name**: human-readable title (Title Case, ≤40 chars)
+            - **type**: one of `SlashCommand | McpTool | Prompt | Workflow`
+            - **scope**: `Global` (available to all agents) or `Agent` (scoped to a specific role)
+            - **groupId**: logical group (e.g., `quality`, `security`, `github`, `data`) — use existing groups when possible
+
+            ## Description (shown in UI)
+            One sentence (≤120 chars) describing what the skill does. Start with a verb. Avoid jargon.
+
+            ## Prompt Template
+            The full instruction text that will be injected as a tool result when the skill is invoked. Must be:
+            - ≥500 characters
+            - Structured with sections and bullet points
+            - Specific about expected output format
+            - Free of ambiguity about what the agent should produce
+
+            ## Justification
+            - **Problem it solves**: what task is currently done poorly or not at all
+            - **Frequency of use**: estimated how often agents would invoke it
+            - **Risk**: potential for misuse, data leakage, or unexpected side effects
+            - **Alternatives considered**: why existing skills don't cover this need
+
+            ## IsMandatory
+            Should this skill be included in every agent's toolset? Justify.
+
+            ## Dependencies
+            Any infrastructure, credentials, or external services required.
+
+            Output as structured Markdown ready to be reviewed and approved via HITL.
+            """);
+
+        await db.SaveChangesAsync();
     }
 
     // ── Agent Templates ───────────────────────────────────────────────────────
 
     private static async Task SeedTemplatesAsync(NoxDbContext db)
     {
-        var existingIds = await db.AgentTemplates
-            .Where(t => new[] { TplRequirementsAnalyst, TplSoftwareArchitect, TplBackendDeveloper,
-                                  TplFrontendDeveloper, TplQaEngineer, TplTechWriter, TplDevOps }
-                        .Contains(t.Id))
-            .Select(t => t.Id)
+        // Load all existing seed templates for upsert
+        var seedIds = new[] { TplRequirementsAnalyst, TplSoftwareArchitect, TplBackendDeveloper,
+                               TplFrontendDeveloper, TplQaEngineer, TplTechWriter, TplDevOps };
+        var existing = await db.AgentTemplates
+            .Where(t => seedIds.Contains(t.Id))
             .ToListAsync();
+        void Upsert(AgentTemplate desired)
+        {
+            var found = existing.FirstOrDefault(t => t.Id == desired.Id);
+            if (found is null)
+            {
+                db.AgentTemplates.Add(desired);
+            }
+            else
+            {
+                found.Name                 = desired.Name;
+                found.Role                 = desired.Role;
+                found.Description          = desired.Description;
+                found.SystemPromptTemplate = desired.SystemPromptTemplate;
+                found.DefaultModel         = desired.DefaultModel;
+                found.SkillGroups          = desired.SkillGroups;
+                found.IsGlobal             = desired.IsGlobal;
+            }
+        }
 
-        var templates = new List<AgentTemplate>();
-
-        if (!existingIds.Contains(TplRequirementsAnalyst))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplRequirementsAnalyst,
                 Name        = "Requirements Analyst",
@@ -114,26 +376,24 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
                     You are a Senior Requirements Analyst in a software development team.
-                    Your task is to analyze a GitHub issue and produce a structured SRS.
+
+                    The Task payload (first user message) is a JSON object with these keys:
+                    - github_issue_number: integer — the issue to analyze
+                    - github_branch: working branch (already created or to be created)
+                    - github_repo / github_pat: repository access
+                    - decision + feedback (only on re-run after rejection): PO feedback to incorporate
 
                     Steps:
-                    1. Call github_read_issue with the issue_number from flow context (variable: github_issue_number).
-                    2. Analyze functional requirements, non-functional requirements, and constraints.
-                    3. Write a complete SRS document to 'docs/SRS.md' using github_write_file.
-                       Commit message: "docs: add Software Requirements Specification"
-
-                    The flow context (Task payload) contains:
-                    - github_repo: repository in "owner/repo" format
-                    - github_pat: personal access token
-                    - github_branch: working branch name
-                    - github_issue_number: issue number to analyze
-
-                    Produce a comprehensive SRS that the architect can use to design the system.
+                    1. If 'decision' == 'Rejected', read the current 'docs/SRS.md', incorporate the feedback, rewrite it.
+                    2. Otherwise: call github_read_issue(issue_number=<github_issue_number value>).
+                    3. Analyze: functional requirements, non-functional requirements, constraints, acceptance criteria.
+                    4. Write the complete SRS to 'docs/SRS.md' using github_write_file.
+                       Commit message: "docs: add/update Software Requirements Specification"
+                    5. Return a concise summary of the key requirements.
                     """
             });
 
-        if (!existingIds.Contains(TplSoftwareArchitect))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplSoftwareArchitect,
                 Name        = "Software Architect",
@@ -144,23 +404,23 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
                     You are a Senior Software Architect.
-                    Your task is to read the requirements and design the technical architecture.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_requirements (summary from the analyst), and optionally decision+feedback on re-run.
 
                     Steps:
-                    1. Read 'docs/SRS.md' using github_read_file.
-                    2. List existing source files with github_list_files to understand the codebase.
-                    3. Design: components, data models, API contracts, technology choices.
-                    4. Write 'docs/ARCHITECTURE.md' using github_write_file.
-                       Commit message: "docs: add Architecture Document"
-                    5. Write 'docs/IMPLEMENTATION_PLAN.md' with a detailed task-by-task plan.
-                       Commit message: "docs: add Implementation Plan"
-
-                    The implementation plan must be detailed enough for developers to follow without further clarification.
+                    1. If 'decision' == 'Rejected', read existing docs and revise incorporating feedback.
+                    2. Read 'docs/SRS.md' using github_read_file.
+                    3. Use github_list_files("") to explore the repository root and understand the tech stack.
+                    4. Design: components, data models, API contracts, technology choices aligned with existing stack.
+                    5. Write 'docs/ARCHITECTURE.md'. Commit: "docs: add Architecture Document"
+                    6. Write 'docs/IMPLEMENTATION_PLAN.md' with numbered tasks per agent role (backend, frontend).
+                       Commit: "docs: add Implementation Plan"
+                    7. Return a concise architecture summary.
                     """
             });
 
-        if (!existingIds.Contains(TplBackendDeveloper))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplBackendDeveloper,
                 Name        = "Backend Developer",
@@ -171,22 +431,23 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
                     You are a Senior Backend Developer.
-                    Your task is to implement the backend changes described in the architecture.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_architect (architecture summary), and optionally decision+feedback on re-run.
 
                     Steps:
-                    1. Read 'docs/ARCHITECTURE.md' and 'docs/IMPLEMENTATION_PLAN.md'.
-                    2. List existing source files to understand the project structure.
-                    3. Implement each backend change (API, services, models) one file at a time.
-                    4. Write each file using github_write_file on the working branch.
-                    5. Produce a summary of what was implemented.
+                    1. If 'decision' == 'Rejected', read changed files and fix them incorporating feedback.
+                    2. Read 'docs/ARCHITECTURE.md' and 'docs/IMPLEMENTATION_PLAN.md'.
+                    3. Use github_list_files to explore the existing source structure.
+                    4. Implement ONLY backend tasks from the plan, one file at a time using github_write_file.
+                       Commit message per file: "feat: <short description>"
+                    5. Return a bullet list of files created/modified.
 
-                    Write clean, idiomatic code that follows the patterns already present in the codebase.
-                    Do not implement frontend or tests — focus only on backend.
+                    Do not implement frontend code or tests. Follow the patterns present in the existing codebase.
                     """
             });
 
-        if (!existingIds.Contains(TplFrontendDeveloper))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplFrontendDeveloper,
                 Name        = "Frontend Developer",
@@ -197,22 +458,23 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
                     You are a Senior Frontend Developer.
-                    Your task is to implement the UI changes described in the architecture.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_backend (backend summary), output_architect (architecture summary).
 
                     Steps:
-                    1. Read 'docs/ARCHITECTURE.md' and 'docs/IMPLEMENTATION_PLAN.md'.
-                    2. List existing frontend source files to understand the structure.
-                    3. Implement each UI component/page one file at a time.
-                    4. Write each file using github_write_file on the working branch.
-                    5. Produce a summary of what was implemented.
+                    1. If 'decision' == 'Rejected', read changed files and fix incorporating feedback.
+                    2. Read 'docs/ARCHITECTURE.md' and 'docs/IMPLEMENTATION_PLAN.md'.
+                    3. Use github_list_files to find the frontend source directory.
+                    4. Implement ONLY frontend tasks from the plan, one file at a time.
+                       Commit message per file: "feat: <short description>"
+                    5. Return a bullet list of files created/modified.
 
-                    Write clean, maintainable UI code that follows existing conventions.
-                    Do not implement backend or tests — focus only on frontend.
+                    Do not implement backend code or tests. Follow existing UI conventions.
                     """
             });
 
-        if (!existingIds.Contains(TplQaEngineer))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplQaEngineer,
                 Name        = "QA Engineer",
@@ -223,21 +485,22 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
                     You are a Senior QA Engineer.
-                    Your task is to write tests for the features implemented in this sprint.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_backend and output_frontend (implementation summaries).
 
                     Steps:
-                    1. Read 'docs/IMPLEMENTATION_PLAN.md' to understand what was implemented.
-                    2. List source files to find the implemented code.
-                    3. Write unit tests and integration tests covering the key scenarios.
-                    4. Write test files using github_write_file on the working branch.
-                    5. Produce a test coverage summary.
-
-                    Focus on correctness, edge cases, and error paths.
+                    1. Read 'docs/IMPLEMENTATION_PLAN.md'.
+                    2. Use github_list_files to locate the implemented files from the summaries.
+                    3. Read each implemented file to understand the logic.
+                    4. Write unit tests and at least one integration test per feature.
+                       Place tests in the same conventions as the existing project (e.g., *.Tests project).
+                       Commit: "test: add tests for <feature>"
+                    5. Return a summary: files tested, scenarios covered, edge cases.
                     """
             });
 
-        if (!existingIds.Contains(TplTechWriter))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplTechWriter,
                 Name        = "Tech Writer",
@@ -248,21 +511,22 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
                     You are a Technical Writer.
-                    Your task is to update project documentation for the delivered features.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_requirements, output_architect, output_backend, output_frontend, output_qa.
 
                     Steps:
-                    1. Read existing 'README.md' (use github_read_file; if not found, create it).
-                    2. Read 'docs/ARCHITECTURE.md' for technical context.
-                    3. Update or create 'README.md' with clear setup, usage, and feature descriptions.
-                    4. Update or create 'docs/CHANGELOG.md' with an entry for this sprint.
-                    5. Write both files using github_write_file.
-
-                    Write clear, concise documentation for both developers and end users.
+                    1. Try to read existing 'README.md' (github_read_file); ignore error if not found.
+                    2. Read 'docs/ARCHITECTURE.md'.
+                    3. Write/update 'README.md': project overview, setup instructions, new features, usage examples.
+                       Commit: "docs: update README"
+                    4. Write/update 'docs/CHANGELOG.md' with a dated entry summarising this sprint's changes.
+                       Commit: "docs: update CHANGELOG"
+                    5. Return a brief summary of documentation updates.
                     """
             });
 
-        if (!existingIds.Contains(TplDevOps))
-            templates.Add(new AgentTemplate
+        Upsert(new AgentTemplate
             {
                 Id          = TplDevOps,
                 Name        = "DevOps Engineer",
@@ -273,25 +537,32 @@ public static class SdlcSeed
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
                     You are a DevOps Engineer.
-                    Your task is to create a Pull Request with all changes from this sprint.
+                    Your task is to create a Pull Request summarising all sprint changes.
+
+                    The Task payload contains: github_branch, github_repo, github_pat, github_base_branch,
+                    output_requirements (analyst summary), output_architect (architecture summary),
+                    output_backend (backend changes), output_frontend (frontend changes),
+                    output_qa (test coverage summary), output_techwriter (docs summary).
+                    On re-run after rejection: decision='Rejected', feedback with reviewer notes.
 
                     Steps:
-                    1. Read 'docs/SRS.md' for the requirements context.
-                    2. Read 'docs/ARCHITECTURE.md' for the technical summary.
-                    3. List files on the working branch to enumerate all changes.
-                    4. Create a PR using github_create_pr with:
-                       - A clear, descriptive title
-                       - A comprehensive body: summary of changes, how to test, notes for reviewers
-                       - base_branch: use the value from flow context (github_base_branch or "main")
-                    5. Return the PR URL.
+                    1. If 'decision' == 'Rejected', close the previous PR (if any) and create a new one
+                       incorporating the feedback into the PR description.
+                    2. Build PR title from output_requirements (first line / feature name).
+                    3. Build PR body (markdown) using all output_* summaries:
+                       - ## Summary (from output_requirements + output_architect)
+                       - ## Backend changes (from output_backend)
+                       - ## Frontend changes (from output_frontend)
+                       - ## Tests (from output_qa)
+                       - ## Documentation (from output_techwriter)
+                       - ## How to test (practical steps)
+                    4. Call github_create_pr(title=<title>, body=<body>,
+                       base_branch=<github_base_branch or "main">).
+                    5. Return the PR URL and number.
                     """
             });
 
-        if (templates.Count > 0)
-        {
-            db.AgentTemplates.AddRange(templates);
-            await db.SaveChangesAsync();
-        }
+        await db.SaveChangesAsync();
     }
 
     // ── SDLC Flow ─────────────────────────────────────────────────────────────

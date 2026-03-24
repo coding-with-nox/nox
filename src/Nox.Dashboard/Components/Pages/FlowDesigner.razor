@@ -50,7 +50,7 @@
                         </div>
                         <div class="card-footer d-flex gap-2">
                             <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewFlow(flow)">@Loc["flows.view"]</button>
-                            <button class="btn btn-success btn-sm" @onclick="() => StartFlow(flow.Id)">@Loc["flows.run"]</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">@Loc["flows.run"]</button>
                             <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditFlow(flow)">@Loc["edit"]</button>
                         </div>
                     </div>
@@ -194,6 +194,66 @@
     <div class="modal-backdrop show"></div>
 }
 
+@if (_showRunModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">▶ Avvia Flow</h5>
+                    <button class="btn-close" @onclick="() => _showRunModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small mb-3">
+                        Le variabili GitHub vengono passate come contesto a tutti gli agenti del flow.
+                        Il PAT non viene loggato ma è visibile in chiaro nel database.
+                    </div>
+
+                    <h6 class="fw-semibold mb-2">Configurazione GitHub</h6>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">Repository <span class="text-muted small">(owner/repo)</span></label>
+                            <input class="form-control" @bind="_runGithubRepo" placeholder="es. myorg/my-project" />
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Personal Access Token</label>
+                            <input type="password" class="form-control" @bind="_runGithubPat" placeholder="ghp_..." />
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">Branch di lavoro</label>
+                            <input class="form-control" @bind="_runGithubBranch" placeholder="es. ai/feature-123" />
+                            <div class="form-text">Il branch verrà creato dagli agenti se non esiste.</div>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Branch base</label>
+                            <input class="form-control" @bind="_runGithubBaseBranch" placeholder="main" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Numero Issue GitHub <span class="text-muted small">(opzionale)</span></label>
+                        <input type="number" class="form-control w-auto" @bind="_runGithubIssueNumber"
+                               @bind:after="AutoFillBranch" min="1" placeholder="42" />
+                    </div>
+
+                    <details class="mt-3">
+                        <summary class="small text-muted">Variabili aggiuntive (JSON)</summary>
+                        <textarea class="form-control font-monospace mt-2" rows="3"
+                                  @bind="_runExtraVariables"
+                                  placeholder="{&quot;my_key&quot;: &quot;my_value&quot;}"></textarea>
+                    </details>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _showRunModal = false">@Loc["cancel"]</button>
+                    <button class="btn btn-success" @onclick="ConfirmStartFlow">▶ Avvia</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
 @code {
     private List<Flow> _flows = [];
     private List<FlowRun> _runs = [];
@@ -204,6 +264,16 @@
     private string _newFlowDesc = string.Empty;
     private Guid _newFlowTemplateId = Guid.Empty;
     private string _runError = string.Empty;
+
+    // Run modal state
+    private bool _showRunModal;
+    private Guid _pendingRunFlowId;
+    private string _runGithubRepo        = string.Empty;
+    private string _runGithubPat         = string.Empty;
+    private string _runGithubBranch      = string.Empty;
+    private string _runGithubBaseBranch  = "main";
+    private int?   _runGithubIssueNumber;
+    private string _runExtraVariables    = string.Empty;
 
     // Edit state
     private Flow? _editingFlow;
@@ -229,17 +299,59 @@
         _selectedFlow = _selectedFlow?.Id == flow.Id ? null : flow;
     }
 
-    private async Task StartFlow(Guid flowId)
+    private void AutoFillBranch()
+    {
+        if (!string.IsNullOrWhiteSpace(_runGithubBranch)) return;
+        _runGithubBranch = _runGithubIssueNumber.HasValue
+            ? $"ai/issue-{_runGithubIssueNumber}"
+            : $"ai/flow-{DateTimeOffset.UtcNow:yyyyMMdd-HHmm}";
+    }
+
+    private void OpenRunModal(Guid flowId)
+    {
+        _pendingRunFlowId = flowId;
+        _runError = string.Empty;
+        _showRunModal = true;
+    }
+
+    private async Task ConfirmStartFlow()
     {
         _runError = string.Empty;
+        _showRunModal = false;
         try
         {
-            await FlowEngine.StartAsync(flowId);
+            var variables = new System.Text.Json.Nodes.JsonObject();
+
+            if (!string.IsNullOrWhiteSpace(_runGithubRepo))
+                variables["github_repo"] = _runGithubRepo.Trim();
+            if (!string.IsNullOrWhiteSpace(_runGithubPat))
+                variables["github_pat"] = _runGithubPat.Trim();
+            if (!string.IsNullOrWhiteSpace(_runGithubBranch))
+                variables["github_branch"] = _runGithubBranch.Trim();
+            if (!string.IsNullOrWhiteSpace(_runGithubBaseBranch))
+                variables["github_base_branch"] = _runGithubBaseBranch.Trim();
+            if (_runGithubIssueNumber.HasValue)
+                variables["github_issue_number"] = _runGithubIssueNumber.Value;
+
+            // Merge extra variables if provided
+            if (!string.IsNullOrWhiteSpace(_runExtraVariables))
+            {
+                try
+                {
+                    var extra = System.Text.Json.Nodes.JsonNode.Parse(_runExtraVariables)?.AsObject();
+                    if (extra is not null)
+                        foreach (var kv in extra)
+                            variables[kv.Key] = kv.Value?.DeepClone();
+                }
+                catch { /* ignore malformed JSON */ }
+            }
+
+            await FlowEngine.StartAsync(_pendingRunFlowId, variables);
             await LoadData();
         }
         catch (Exception ex)
         {
-            _runError = ex.Message.Contains("no Start node")
+            _runError = ex.Message.Contains("Start node")
                 ? "Il flow non ha un nodo Start. Visualizza il grafo e verifica la struttura."
                 : $"Errore avvio: {ex.Message}";
         }

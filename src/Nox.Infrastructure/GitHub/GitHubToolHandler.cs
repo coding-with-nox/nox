@@ -29,35 +29,63 @@ public class GitHubToolHandler(IHttpClientFactory httpClientFactory)
             "github-read-issue" => AIFunctionFactory.Create(
                 async (int issue_number) => await ReadIssueAsync(repo, issue_number, pat),
                 name: "github_read_issue",
-                description: "Read a GitHub issue by its number. Returns title, body, state, and labels."),
+                description:
+                    "Reads a GitHub issue by number from the current repository. " +
+                    "Returns: title, body (markdown), state (open/closed), label names. " +
+                    "Use this as the first step to understand what needs to be built. " +
+                    $"Repository: {repo}."),
 
             "github-create-branch" => AIFunctionFactory.Create(
                 async (string branch_name, string base_branch = "main") =>
                     await CreateBranchAsync(repo, branch_name, base_branch, pat),
                 name: "github_create_branch",
-                description: "Create a new branch in the repository from a base branch."),
+                description:
+                    "Creates a new git branch in the repository. " +
+                    "branch_name: name for the new branch (e.g. 'ai/issue-42-auth'). " +
+                    "base_branch: existing branch to fork from (default: 'main'). " +
+                    "Returns confirmation with the base commit SHA. " +
+                    "Call this before writing any files."),
 
             "github-read-file" => AIFunctionFactory.Create(
                 async (string path) => await ReadFileAsync(repo, path, branch, pat),
                 name: "github_read_file",
-                description: $"Read file content from the repository (branch: {branch})."),
+                description:
+                    $"Reads the raw text content of a file from branch '{branch}'. " +
+                    "path: relative path from repo root (e.g. 'src/api/Program.cs'). " +
+                    "If path points to a directory, returns a file/directory listing instead. " +
+                    "Content is truncated at 8000 chars if the file is large."),
 
             "github-write-file" => AIFunctionFactory.Create(
                 async (string path, string content, string commit_message) =>
                     await WriteFileAsync(repo, path, content, commit_message, branch, pat),
                 name: "github_write_file",
-                description: $"Create or update a file on branch '{branch}'. Content is plain text."),
+                description:
+                    $"Creates or overwrites a file on branch '{branch}'. " +
+                    "path: full relative path including filename and extension. " +
+                    "content: complete file content as plain text (will be base64-encoded). " +
+                    "commit_message: short imperative sentence (e.g. 'feat: add UserService'). " +
+                    "If file already exists it is updated; otherwise created."),
 
             "github-list-files" => AIFunctionFactory.Create(
                 async (string path = "") => await ListFilesAsync(repo, path, branch, pat),
                 name: "github_list_files",
-                description: $"List files and directories at a given path (branch: {branch}). Use empty path for root."),
+                description:
+                    $"Lists files and subdirectories at a given path on branch '{branch}'. " +
+                    "path: relative directory path, or empty string for the repository root. " +
+                    "Returns lines in format '[file] name' or '[dir] name'. " +
+                    "Use to explore the codebase structure before reading or writing files."),
 
             "github-create-pr" => AIFunctionFactory.Create(
                 async (string title, string body, string base_branch = "main") =>
                     await CreatePrAsync(repo, title, body, branch, base_branch, pat),
                 name: "github_create_pr",
-                description: $"Create a pull request from '{branch}' to base branch."),
+                description:
+                    $"Opens a Pull Request from the working branch '{branch}' into base_branch. " +
+                    "title: concise PR title (imperative, ≤72 chars). " +
+                    "body: markdown PR description — include: summary of changes, how to test, " +
+                    "breaking changes if any. " +
+                    "base_branch: target branch (default 'main', use github_base_branch variable). " +
+                    "Returns the PR URL and number."),
 
             _ => null
         };

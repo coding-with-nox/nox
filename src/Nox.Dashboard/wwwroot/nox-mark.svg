@@ -1,0 +1,19 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="nox-bg" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="nox-accent" x1="20" y1="14" x2="46" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#nox-bg)"/>
+  <path d="M21 19L32 30.5L43 19" stroke="#F8FAFC" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 30.5V45" stroke="#F8FAFC" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="21" cy="19" r="5.5" fill="#F8FAFC"/>
+  <circle cx="43" cy="19" r="5.5" fill="#F8FAFC"/>
+  <circle cx="32" cy="30.5" r="6" fill="url(#nox-accent)"/>
+  <circle cx="32" cy="45" r="5.5" fill="#F8FAFC"/>
+</svg>

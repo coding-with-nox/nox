@@ -136,6 +136,9 @@ try
         await db.Database.MigrateAsync();
     }
 
+    // Seed SDLC agent templates, GitHub skills, and flow template
+    await Nox.Api.Seed.SdlcSeed.RunAsync(app.Services);
+
     app.UseSerilogRequestLogging();
     app.UseCors();
     app.UseRateLimiter();

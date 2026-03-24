@@ -61,6 +61,15 @@ public class FlowGrain(
         // Store node result
         state.State.NodeResults[completedNodeId] = result.Output.ToJsonString();
 
+        // Inject agent output summary into flow variables so downstream agents have context
+        if (result.Success && result.Output.TryGetPropertyValue("result", out var agentOutput) && agentOutput is not null)
+        {
+            var vars = JsonObject.Parse(state.State.Variables)?.AsObject() ?? new JsonObject();
+            var key = "output_" + completedNodeId.Replace("-", "_");
+            vars[key] = agentOutput.DeepClone();
+            state.State.Variables = vars.ToJsonString();
+        }
+
         // Remove from current nodes
         state.State.CurrentNodeIds.Remove(completedNodeId);
 
