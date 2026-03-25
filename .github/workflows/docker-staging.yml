@@ -3,8 +3,7 @@ name: Docker Staging Images
 on:
   push:
     tags:
-      - "v*-staging"
-      - "v*-stage"
+      - "v*.*.*-stage"
 
 permissions:
   contents: read

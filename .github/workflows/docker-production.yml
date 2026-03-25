@@ -3,7 +3,9 @@ name: Docker Production Images
 on:
   push:
     tags:
-      - "v*"
+      - "!v*.*.*-staging"
+      - "!v*.*.*-stage"
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -11,7 +13,6 @@ permissions:
 
 jobs:
   build-and-push:
-    if: ${{ !endsWith(github.ref_name, '-staging') && !endsWith(github.ref_name, '-stage') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
