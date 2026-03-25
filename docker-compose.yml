@@ -98,11 +98,11 @@ services:
     volumes:
       - ./infrastructure/keycloak/nox-realm.json:/opt/keycloak/data/import/nox-realm.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/realms/master || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 90s
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   # ── Applications ──────────────────────────────────────────────────────────────
 
