@@ -6,7 +6,10 @@
             <NotAuthorized>
                 @{
                     var returnUrl = new Uri(Navigation.Uri).PathAndQuery;
-                    Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+                    var target = string.IsNullOrEmpty(returnUrl) || returnUrl == "/"
+                        ? "/login"
+                        : $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+                    Navigation.NavigateTo(target, forceLoad: true);
                 }
             </NotAuthorized>
             <Authorizing>

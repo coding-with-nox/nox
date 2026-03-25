@@ -39,14 +39,6 @@
 
     private bool _loading;
 
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (!firstRender || _loading)
-            return;
-
-        SignIn();
-    }
-
     private void SignIn()
     {
         _loading = true;

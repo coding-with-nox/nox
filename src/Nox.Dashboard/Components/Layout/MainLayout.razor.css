@@ -30,6 +30,18 @@ article.content {
     flex: 1;
 }
 
+.page-login {
+    display: block;
+}
+
+.login-main {
+    min-height: 100vh;
+}
+
+article.content.content-login {
+    padding: 0;
+}
+
 /* ── Blazor error toast ────────────────────────────────────── */
 #blazor-error-ui {
     background: #1e293b;

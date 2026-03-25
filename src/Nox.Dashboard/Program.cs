@@ -40,7 +40,7 @@ try
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme          = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     })
     .AddCookie(options =>
     {
@@ -50,6 +50,8 @@ try
         options.Cookie.SameSite   = SameSiteMode.Lax;
         options.ExpireTimeSpan    = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
+        options.LoginPath         = "/login";
+        options.AccessDeniedPath  = "/login";
     })
     .AddOpenIdConnect(options =>
     {
