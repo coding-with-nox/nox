@@ -8,7 +8,6 @@
 @inject ThemeService Theme
 @inject LanguageService Loc
 @inject IJSRuntime JS
-@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 <div class="nav-top">
@@ -129,7 +128,7 @@
             </button>
         </div>
         <div class="nav-footer-text">@Loc["nav.footer"]</div>
-        <AuthorizeView>
+        @* <AuthorizeView>
             <Authorized>
                 <button class="nav-link w-100 text-start mt-1" style="background:none;border:none;cursor:pointer;color:inherit;"
                         @onclick='() => Nav.NavigateTo("/logout", forceLoad: true)'>
@@ -137,7 +136,7 @@
                     Esci
                 </button>
             </Authorized>
-        </AuthorizeView>
+        </AuthorizeView> *@
     </div>
 
 </div>

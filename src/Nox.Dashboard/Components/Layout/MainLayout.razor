@@ -16,24 +16,35 @@
                  style="background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:.82rem;min-height:36px;">
                 <AuthorizeView>
                     <Authorized>
-                        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#e2e8f0;color:#64748b;flex-shrink:0;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.029 10 8 10c-2.029 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
-                            </svg>
-                        </span>
-                        <span class="text-muted">
-                            @context.User.Identity?.Name
-                        </span>
-                        @foreach (var role in new[]{"nox-admin","nox-manager","nox-viewer"}
-                            .Where(r => context.User.IsInRole(r)))
-                        {
-                            <span class="badge bg-secondary" style="font-size:.7rem;">@role</span>
-                        }
-                        <button class="btn btn-outline-secondary btn-sm py-0 px-2"
-                                style="font-size:.78rem;"
-                                @onclick='() => Nav.NavigateTo("/logout", forceLoad: true)'>
-                            Esci
-                        </button>
+                        <details class="user-menu">
+                            <summary class="user-menu-trigger" aria-label="Menu utente">
+                                <span class="user-menu-avatar" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.029 10 8 10c-2.029 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
+                                    </svg>
+                                </span>
+                                <span class="user-menu-name">@context.User.Identity?.Name</span>
+                            </summary>
+
+                            <div class="user-menu-dropdown">
+                                <div class="user-menu-header">
+                                    <div class="user-menu-label">Account</div>
+                                    <div class="user-menu-username">@context.User.Identity?.Name</div>
+                                </div>
+                                <div class="user-menu-roles">
+                                    @foreach (var role in new[] { "nox-admin", "nox-manager", "nox-viewer" }
+                                        .Where(r => context.User.IsInRole(r)))
+                                    {
+                                        <span class="badge bg-secondary user-menu-role">@role</span>
+                                    }
+                                </div>
+                                <button class="user-menu-action"
+                                        type="button"
+                                        @onclick='() => Nav.NavigateTo("/logout", forceLoad: true)'>
+                                    Esci
+                                </button>
+                            </div>
+                        </details>
                     </Authorized>
                 </AuthorizeView>
             </div>

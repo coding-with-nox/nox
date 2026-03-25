@@ -167,8 +167,14 @@ services:
 
 volumes:
   postgres_data:
+    name: nox-dev-postgres
   postgres_orleans_data:
+    name: nox-dev-postgres-orleans
   redis_data:
+    name: nox-dev-redis
   qdrant_data:
+    name: nox-dev-qdrant
   seq_data:
+    name: nox-dev-seq
   dashboard_dp_keys:
+    name: nox-dev-dashboard-dp-keys
