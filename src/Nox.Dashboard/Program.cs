@@ -53,15 +53,21 @@ try
     })
     .AddOpenIdConnect(options =>
     {
-        // Authority = public URL (browser redirects + token issuer validation)
+        var publicMetadataAddress = publicAuthority.TrimEnd('/') + "/.well-known/openid-configuration";
+
+        // Authority = public URL used by the browser during redirects
         options.Authority           = publicAuthority;
-        // MetadataAddress = internal Docker URL (avoids DNS issues in containers)
-        options.MetadataAddress     = internalAuthority + "/.well-known/openid-configuration";
+        options.MetadataAddress     = publicMetadataAddress;
         options.ClientId            = "nox-dashboard";
         options.ResponseType        = "code";
+        options.UsePkce            = true;
         options.SaveTokens          = true;
         options.GetClaimsFromUserInfoEndpoint = true;
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.BackchannelHttpHandler = new OpenIdConnectBackchannelRewriteHandler(publicAuthority, internalAuthority)
+        {
+            InnerHandler = new HttpClientHandler()
+        };
 
         options.Scope.Clear();
         options.Scope.Add("openid");
@@ -82,6 +88,7 @@ try
     });
 
     builder.Services.AddAuthorization();
+    builder.Services.AddCascadingAuthenticationState();
 
     // ── Razor components ───────────────────────────────────────────────
     builder.Services.AddRazorComponents()
@@ -176,4 +183,30 @@ public class DashboardFlowEngineProxy(IHttpClientFactory http) : IFlowEngine
     public Task CancelAsync(Guid flowRunId, string reason) => Task.CompletedTask;
     public IAsyncEnumerable<FlowEvent> SubscribeToEventsAsync(Guid flowRunId, CancellationToken ct)
         => throw new NotSupportedException();
+}
+
+file sealed class OpenIdConnectBackchannelRewriteHandler(string publicAuthority, string internalAuthority) : DelegatingHandler
+{
+    private readonly Uri _publicBase = EnsureTrailingSlash(publicAuthority);
+    private readonly Uri _internalBase = EnsureTrailingSlash(internalAuthority);
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.RequestUri is { } uri && ShouldRewrite(uri))
+        {
+            var relative = _publicBase.MakeRelativeUri(uri);
+            request.RequestUri = new Uri(_internalBase, relative);
+        }
+
+        return base.SendAsync(request, cancellationToken);
+    }
+
+    private bool ShouldRewrite(Uri requestUri) =>
+        _publicBase != _internalBase
+        && string.Equals(requestUri.Scheme, _publicBase.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(requestUri.Host, _publicBase.Host, StringComparison.OrdinalIgnoreCase)
+        && requestUri.Port == _publicBase.Port;
+
+    private static Uri EnsureTrailingSlash(string authority) =>
+        new(authority.EndsWith('/') ? authority : authority + "/", UriKind.Absolute);
 }
