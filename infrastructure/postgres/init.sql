@@ -378,6 +378,16 @@ VALUES
 )
 ,
 (
+    '20000000-0000-0000-0000-000000000007',
+    'working-memory',
+    'Working Memory',
+    'Activates a token-efficient working memory protocol that tracks task state, decisions, and tool results across all steps of the current flow.',
+    'SlashCommand',
+    'Global',
+    '{"promptTemplate": "Maintain a compressed MEM block on every step. Track: goal, phase, done, next, vars, tools_used. Never repeat context. Output only delta. Use structured formats. No preamble. See full protocol via working-memory skill."}',
+    'Active'
+),
+(
     '20000000-0000-0000-0000-000000000006',
     'pentest',
     'Senior Penetration Tester',

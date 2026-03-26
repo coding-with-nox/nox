@@ -24,6 +24,7 @@ public static class SdlcSeed
     private static readonly Guid TplQaEngineer          = Guid.Parse("a1000000-0000-0000-0000-000000000005");
     private static readonly Guid TplTechWriter          = Guid.Parse("a1000000-0000-0000-0000-000000000006");
     private static readonly Guid TplDevOps              = Guid.Parse("a1000000-0000-0000-0000-000000000007");
+    private static readonly Guid TplPenetrationTester   = Guid.Parse("a1000000-0000-0000-0000-000000000008");
 
     // SDLC Flow
     private static readonly Guid SdlcFlowId = Guid.Parse("f1000000-0000-0000-0000-000000000001");
@@ -49,7 +50,7 @@ public static class SdlcSeed
 
     private static readonly string[] CommandSlugs =
     [
-        "docs", "code-review", "summarize", "test-plan", "propose-skill", "pentest"
+        "docs", "code-review", "summarize", "test-plan", "propose-skill", "pentest", "working-memory"
     ];
 
     private static async Task SeedSkillsAsync(NoxDbContext db)
@@ -376,6 +377,89 @@ public static class SdlcSeed
             """);
 
         UpsertCmd(
+            "working-memory",
+            "Working Memory",
+            "Activates a token-efficient working memory protocol that tracks task state, decisions, and tool results across all steps of the current flow without repeating context.",
+            """
+            ## WORKING MEMORY PROTOCOL
+
+            You operate under a strict token budget. Apply this protocol on every step.
+
+            ---
+
+            ### MEMORY BLOCK
+
+            Maintain a compressed state block at the top of every response. Update it each step — never copy it verbatim from the previous step, only write the delta.
+
+            ```
+            MEM:
+              goal: <one-line task objective>
+              phase: <current phase name>
+              done: [<completed step>, ...]
+              next: <immediate next action>
+              vars: {<key>: <value>, ...}   # only non-obvious state
+              tools_used: [<tool>: <result_summary>, ...]
+              blocked: <blocker or null>
+            ```
+
+            Rules:
+            - `vars` only holds values that cannot be re-derived from context
+            - `tools_used` stores one-line summaries, never full output
+            - `done` accumulates across all steps in this flow
+            - Drop any field that is null or empty
+
+            ---
+
+            ### TOKEN EFFICIENCY RULES
+
+            1. **No repetition** — never restate what is already in MEM or was said in a previous step
+            2. **Output only delta** — write only what changed or was decided this step
+            3. **Structured over prose** — use bullets, tables, code blocks; no narrative padding
+            4. **Tool calls are silent** — do not explain what you are about to call; call it, then summarize the result in one line inside `tools_used`
+            5. **Compress on write** — before writing any section, ask: can this be expressed in fewer tokens without losing information?
+            6. **No preamble** — start directly with MEM block, then output
+
+            ---
+
+            ### TOOL USAGE PROTOCOL
+
+            Before calling a tool:
+            - Check `tools_used` — if the same call with the same params was already made, use the cached summary instead
+            - Prefer batch reads over sequential reads where the tool supports it
+
+            After calling a tool:
+            - Write a max 15-word summary into `tools_used`
+            - If the result is large, extract only the relevant slice and discard the rest
+
+            ---
+
+            ### STEP OUTPUT FORMAT
+
+            ```
+            MEM: { ... updated block ... }
+
+            ACTION: <what was done this step>
+            RESULT: <outcome, max 3 bullets>
+            NEXT: <next action or DONE>
+            ```
+
+            If the step produces a deliverable (code, report, plan), output it after NEXT as a fenced block.
+
+            ---
+
+            ### FLOW COMPLETION
+
+            When `next = DONE`:
+            - Output final MEM with `phase: complete`
+            - Summarize `done` as a numbered list
+            - Output the final deliverable
+
+            ---
+
+            END PROTOCOL.
+            """);
+
+        UpsertCmd(
             "pentest",
             "Senior Penetration Tester",
             "Assesses the security of a web application by identifying technical and business logic vulnerabilities, simulating a real-world attacker within defined ethical and legal constraints.",
@@ -530,7 +614,8 @@ public static class SdlcSeed
     {
         // Load all existing seed templates for upsert
         var seedIds = new[] { TplRequirementsAnalyst, TplSoftwareArchitect, TplBackendDeveloper,
-                               TplFrontendDeveloper, TplQaEngineer, TplTechWriter, TplDevOps };
+                               TplFrontendDeveloper, TplQaEngineer, TplTechWriter, TplDevOps,
+                               TplPenetrationTester };
         var existing = await db.AgentTemplates
             .Where(t => seedIds.Contains(t.Id))
             .ToListAsync();
@@ -563,6 +648,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Senior Requirements Analyst in a software development team.
 
                     The Task payload (first user message) is a JSON object with these keys:
@@ -591,6 +681,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Senior Software Architect.
 
                     The Task payload contains: github_branch, github_repo, github_pat,
@@ -618,6 +713,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Senior Backend Developer.
 
                     The Task payload contains: github_branch, github_repo, github_pat,
@@ -645,6 +745,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude4,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Senior Frontend Developer.
 
                     The Task payload contains: github_branch, github_repo, github_pat,
@@ -672,6 +777,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Senior QA Engineer.
 
                     The Task payload contains: github_branch, github_repo, github_pat,
@@ -698,6 +808,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a Technical Writer.
 
                     The Task payload contains: github_branch, github_repo, github_pat,
@@ -724,6 +839,11 @@ public static class SdlcSeed
                 SkillGroups = ["github"],
                 DefaultModel = LlmModel.Claude3Sonnet,
                 SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
                     You are a DevOps Engineer.
                     Your task is to create a Pull Request summarising all sprint changes.
 
@@ -750,6 +870,65 @@ public static class SdlcSeed
                     """
             });
 
+        Upsert(new AgentTemplate
+            {
+                Id          = TplPenetrationTester,
+                Name        = "Penetration Tester",
+                Role        = "penetration-tester",
+                Description = "Performs a security assessment of the implemented code, identifying vulnerabilities before the PR is created.",
+                IsGlobal    = true,
+                SkillGroups = ["github"],
+                DefaultModel = LlmModel.Claude4,
+                SystemPromptTemplate = """
+                    ## WORKING MEMORY
+                    Maintain a MEM block at the top of every response: {goal, phase, done[], next, vars{}, tools_used[]}. Output only delta. No repetition. Structured output only. No preamble.
+
+                    ---
+
+                    You are a Senior Web Application Penetration Tester embedded in the SDLC pipeline.
+                    Your goal is to identify security vulnerabilities in the code implemented during this sprint BEFORE it is merged.
+
+                    The Task payload contains: github_branch, github_repo, github_pat,
+                    output_backend (list of backend files created/modified),
+                    output_frontend (list of frontend files created/modified),
+                    output_qa (test coverage summary).
+
+                    Steps:
+                    1. Read 'docs/ARCHITECTURE.md' to understand authentication flows, API contracts, and data models.
+                    2. Use output_backend and output_frontend to identify the files changed this sprint.
+                    3. Read each changed file using github_read_file. Focus on:
+                       - Input validation and sanitization
+                       - Authentication and authorization checks
+                       - SQL/NoSQL queries and ORM usage
+                       - File upload and output encoding
+                       - Secrets or credentials in code
+                       - Dependency versions (flag known-vulnerable patterns)
+                    4. For each vulnerability found, produce a finding in this format:
+
+                       FINDING: [title]
+                       FILE: [path:line]
+                       SEVERITY: [low|medium|high|critical]
+                       DESCRIPTION: [one paragraph]
+                       POC: [minimal reproduction or attack vector]
+                       IMPACT: [what an attacker achieves]
+                       REMEDIATION: [specific code fix or pattern]
+
+                    5. Write the full security report to 'docs/SECURITY_REPORT.md'.
+                       Commit: "security: penetration test report for sprint"
+                    6. Return:
+                       - summary_risk_level: [low|medium|high|critical]
+                       - findings_count: { critical: N, high: N, medium: N, low: N }
+                       - top_3_findings: [title, severity, file]
+                       - blocking: true if any critical or high finding exists
+
+                    BEHAVIOR:
+                    - Stay within the repository scope only
+                    - Do not execute code, only analyze statically
+                    - Mark uncertain findings as "needs-verification"
+                    - If no vulnerabilities found, state clearly: "No findings. Codebase appears secure for this sprint."
+                    """
+            });
+
         await db.SaveChangesAsync();
     }
 
@@ -757,8 +936,7 @@ public static class SdlcSeed
 
     private static async Task SeedFlowAsync(NoxDbContext db)
     {
-        if (await db.Flows.AnyAsync(f => f.Id == SdlcFlowId))
-            return;
+        var existingFlow = await db.Flows.FirstOrDefaultAsync(f => f.Id == SdlcFlowId);
 
         // Helper positions
         static FlowPosition P(double x, double y) => new((float)x, (float)y);
@@ -793,15 +971,22 @@ public static class SdlcSeed
                 Position = P(700, 500) },
 
             new FlowNode { Id = "qa",              NodeType = NodeType.AgentTask,       Label = "QA Engineer",                 AgentTemplateId = TplQaEngineer,        Position = P(900, 500) },
-            new FlowNode { Id = "tech-writer",     NodeType = NodeType.AgentTask,       Label = "Tech Writer",                 AgentTemplateId = TplTechWriter,        Position = P(300, 700) },
-            new FlowNode { Id = "devops",          NodeType = NodeType.AgentTask,       Label = "DevOps Engineer",             AgentTemplateId = TplDevOps,            Position = P(500, 700) },
+            new FlowNode { Id = "pentest",         NodeType = NodeType.AgentTask,       Label = "Penetration Tester",          AgentTemplateId = TplPenetrationTester, Position = P(300, 700) },
+            new FlowNode { Id = "hitl-security",   NodeType = NodeType.HitlCheckpoint,  Label = "Revisiona Sicurezza",
+                Config = new JsonObject { ["checkpointType"] = "Approval", ["title"] = "Approvazione Security Report",
+                    ["description"] = "Revisiona il report di penetration testing. Se ci sono finding critici o high, rifiuta per tornare allo sviluppo per le remediation. Approva se il rischio è accettabile.",
+                    ["expiresInHours"] = 72 },
+                Position = P(500, 700) },
+
+            new FlowNode { Id = "tech-writer",     NodeType = NodeType.AgentTask,       Label = "Tech Writer",                 AgentTemplateId = TplTechWriter,        Position = P(700, 700) },
+            new FlowNode { Id = "devops",          NodeType = NodeType.AgentTask,       Label = "DevOps Engineer",             AgentTemplateId = TplDevOps,            Position = P(900, 700) },
             new FlowNode { Id = "hitl-pr",         NodeType = NodeType.HitlCheckpoint,  Label = "Approva Pull Request",
                 Config = new JsonObject { ["checkpointType"] = "Approval", ["title"] = "Approvazione Pull Request",
                     ["description"] = "Revisiona la PR creata. Approva per completare il flusso o rifiuta per tornare allo sviluppo.",
                     ["expiresInHours"] = 72 },
-                Position = P(700, 700) },
+                Position = P(500, 900) },
 
-            new FlowNode { Id = "end",             NodeType = NodeType.End,             Label = "End",                        Position = P(900, 700) }
+            new FlowNode { Id = "end",             NodeType = NodeType.End,             Label = "End",                        Position = P(700, 900) }
         ]);
 
         // ── Edges (with revision loops on rejection) ───────────────────────
@@ -825,24 +1010,38 @@ public static class SdlcSeed
             new FlowEdge { FromNodeId = "hitl-impl",   ToNodeId = "qa",           Condition = "decision == 'Approved'" },
             new FlowEdge { FromNodeId = "hitl-impl",   ToNodeId = "backend",      Condition = "decision == 'Rejected'" },
 
-            // QA → Docs → PR
-            new FlowEdge { FromNodeId = "qa",          ToNodeId = "tech-writer" },
-            new FlowEdge { FromNodeId = "tech-writer",  ToNodeId = "devops" },
-            new FlowEdge { FromNodeId = "devops",       ToNodeId = "hitl-pr" },
-            new FlowEdge { FromNodeId = "hitl-pr",      ToNodeId = "end",          Condition = "decision == 'Approved'" },
-            new FlowEdge { FromNodeId = "hitl-pr",      ToNodeId = "backend",      Condition = "decision == 'Rejected'" },
+            // QA → Pentest → Security review → Docs → PR
+            new FlowEdge { FromNodeId = "qa",            ToNodeId = "pentest" },
+            new FlowEdge { FromNodeId = "pentest",       ToNodeId = "hitl-security" },
+            new FlowEdge { FromNodeId = "hitl-security", ToNodeId = "tech-writer",  Condition = "decision == 'Approved'" },
+            new FlowEdge { FromNodeId = "hitl-security", ToNodeId = "backend",      Condition = "decision == 'Rejected'" },
+            new FlowEdge { FromNodeId = "tech-writer",   ToNodeId = "devops" },
+            new FlowEdge { FromNodeId = "devops",        ToNodeId = "hitl-pr" },
+            new FlowEdge { FromNodeId = "hitl-pr",       ToNodeId = "end",          Condition = "decision == 'Approved'" },
+            new FlowEdge { FromNodeId = "hitl-pr",       ToNodeId = "backend",      Condition = "decision == 'Rejected'" },
         ]);
 
-        db.Flows.Add(new Flow
+        const string description = "Flusso di sviluppo software completo: requirements → architettura → implementazione → QA → penetration test → documentazione → PR. Include checkpoint HITL con loop di revisione e security gate.";
+
+        if (existingFlow is null)
         {
-            Id          = SdlcFlowId,
-            Name        = "SDLC Completo",
-            Description = "Flusso di sviluppo software completo: requirements → architettura → implementazione → QA → documentazione → PR. Include checkpoint HITL con loop di revisione.",
-            ProjectId   = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            CreatedBy   = "system",
-            Status      = FlowStatus.Active,
-            Graph       = graph,
-        });
+            db.Flows.Add(new Flow
+            {
+                Id          = SdlcFlowId,
+                Name        = "SDLC Completo",
+                Description = description,
+                ProjectId   = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                CreatedBy   = "system",
+                Status      = FlowStatus.Active,
+                Graph       = graph,
+            });
+        }
+        else
+        {
+            existingFlow.Description = description;
+            existingFlow.Graph       = graph;
+            existingFlow.UpdatedAt   = DateTimeOffset.UtcNow;
+        }
 
         await db.SaveChangesAsync();
     }

@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5532:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -30,7 +30,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_ORLEANS_PASSWORD}
       POSTGRES_DB: ${POSTGRES_ORLEANS_DB}
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:5533:5432"
     volumes:
       - postgres_orleans_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/orleans-init.sql:/docker-entrypoint-initdb.d/orleans-init.sql
