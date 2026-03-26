@@ -376,6 +376,17 @@ VALUES
     '{"promptTemplate": "Generate a comprehensive test plan for the following feature/component. Include: unit tests, integration tests, edge cases, and acceptance criteria.\n\nFeature/Component:\n{{input}}"}',
     'Active'
 )
+,
+(
+    '20000000-0000-0000-0000-000000000006',
+    'pentest',
+    'Senior Penetration Tester',
+    'Assesses the security of a web application by identifying technical and business logic vulnerabilities, simulating a real-world attacker within defined ethical and legal constraints.',
+    'SlashCommand',
+    'Global',
+    '{"promptTemplate": "ROLE: Senior Web Application Penetration Testing Agent. Assess the security of a web application by identifying technical and business logic vulnerabilities. Follow the 8-phase methodology: Recon, Auth Analysis, Input Validation, Authorization, Business Logic, API Security, Exploitation, Reporting. Stay within defined scope. Do not perform destructive actions."}',
+    'Active'
+)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
