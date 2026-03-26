@@ -19,9 +19,13 @@ main {
     color: #e2e8f0;
 }
 
-/* ── Top bar (removed Microsoft link — now just a spacer) ─── */
+/* ── Top bar ────────────────────────────────────────────────── */
 .top-row {
-    display: none;
+    display: flex;
+    background: var(--nox-card-bg);
+    border-bottom: 1px solid var(--nox-border);
+    font-size: .82rem;
+    min-height: 36px;
 }
 
 .user-menu {
@@ -43,21 +47,21 @@ main {
     gap: 0.5rem;
     min-height: 32px;
     padding: 0.2rem 0.45rem;
-    border: 1px solid #dbe4ee;
+    border: 1px solid var(--nox-border);
     border-radius: 999px;
-    background: #ffffff;
-    color: #64748b;
+    background: var(--nox-card-bg);
+    color: var(--nox-text-muted);
     cursor: pointer;
     user-select: none;
 }
 
 .user-menu-trigger:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
+    background: var(--nox-content-bg);
+    border-color: var(--nox-border);
 }
 
 .user-menu[open] .user-menu-trigger {
-    border-color: #cbd5e1;
+    border-color: var(--nox-border);
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
@@ -68,14 +72,14 @@ main {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: #e2e8f0;
-    color: #64748b;
+    background: var(--nox-border);
+    color: var(--nox-text-muted);
     flex-shrink: 0;
 }
 
 .user-menu-name {
     font-size: 0.82rem;
-    color: #64748b;
+    color: var(--nox-text-muted);
     max-width: 160px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -88,52 +92,19 @@ main {
     right: 0;
     min-width: 220px;
     padding: 0.75rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--nox-border);
     border-radius: 12px;
-    background: #ffffff;
+    background: var(--nox-card-bg);
     box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
     z-index: 1000;
 }
 
-.user-menu-header {
-    margin-bottom: 0.5rem;
-}
-
-.user-menu-label {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #94a3b8;
-}
-
-.user-menu-username {
-    margin-top: 0.2rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #0f172a;
-    word-break: break-word;
-}
-
-.user-menu-roles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    padding-bottom: 0.65rem;
-    margin-bottom: 0.65rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.user-menu-role {
-    font-size: 0.68rem;
-}
-
 .user-menu-action {
     width: 100%;
-    border: none;
+    border: 1px solid var(--nox-border);
     border-radius: 8px;
-    background: #f8fafc;
-    color: #0f172a;
+    background: var(--nox-content-bg);
+    color: var(--nox-text);
     padding: 0.55rem 0.75rem;
     font-size: 0.86rem;
     font-weight: 600;
@@ -142,7 +113,7 @@ main {
 }
 
 .user-menu-action:hover {
-    background: #eef2f7;
+    background: var(--nox-border);
 }
 
 /* ── Content area ──────────────────────────────────────────── */

@@ -16,29 +16,35 @@
 <style>
 .fd-wrap   { display:flex; flex-direction:column; height:calc(100vh - 56px); overflow:hidden; }
 .fd-header { height:52px; display:flex; align-items:center; gap:.5rem; padding:0 .75rem;
-             background:#fff; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
+             background:var(--nox-card-bg); border-bottom:1px solid var(--nox-border); flex-shrink:0; }
 .fd-body   { flex:1; display:flex; overflow:hidden; }
-.fd-palette{ width:152px; background:#f8fafc; border-right:1px solid #e2e8f0;
+.fd-palette{ width:152px; background:var(--nox-content-bg); border-right:1px solid var(--nox-border);
              padding:.5rem .4rem; overflow-y:auto; flex-shrink:0; }
 .fd-canvas { flex:1; overflow:hidden; position:relative; background:#f1f5f9; cursor:default; }
-.fd-props  { width:264px; background:#fff; border-left:1px solid #e2e8f0;
+.fd-props  { width:264px; background:var(--nox-card-bg); border-left:1px solid var(--nox-border);
              padding:.75rem; overflow-y:auto; flex-shrink:0; }
 .fd-canvas svg { width:100%; height:100%; display:block; }
 .pal-btn   { display:flex; align-items:center; gap:.4rem; width:100%; padding:.38rem .5rem;
-             margin-bottom:.3rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff;
-             cursor:pointer; font-size:.78rem; font-weight:500; color:#334155; transition:all .15s; }
+             margin-bottom:.3rem; border:1px solid var(--nox-border); border-radius:7px;
+             background:var(--nox-card-bg); cursor:pointer; font-size:.78rem; font-weight:500;
+             color:var(--nox-text); transition:all .15s; }
 .pal-btn:hover { background:#f0f9ff; border-color:#93c5fd; }
 .pal-dot   { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
-.pal-sep   { height:1px; background:#e2e8f0; margin:.4rem 0; }
-.pal-section { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase;
+.pal-sep   { height:1px; background:var(--nox-border); margin:.4rem 0; }
+.pal-section { font-size:.7rem; font-weight:600; color:var(--nox-text-muted); text-transform:uppercase;
                letter-spacing:.05em; margin:.4rem 0 .25rem; padding:0 .2rem; }
 .connect-active { background:#eff6ff !important; border-color:#3b82f6 !important; color:#1d4ed8 !important; }
-.prop-label { font-size:.75rem; font-weight:600; color:#64748b; margin-bottom:.2rem; }
+.prop-label { font-size:.75rem; font-weight:600; color:var(--nox-text-muted); margin-bottom:.2rem; }
 .prop-val   { font-size:.82rem; }
+.fd-hint-box { background:var(--nox-content-bg); border-radius:8px; padding:.6rem .7rem; }
 /* CSS-driven selection — JS sets data-selected, no Blazor re-render needed */
 #flow-svg [data-nid][data-selected="true"] { filter: drop-shadow(0 0 6px #6366f1aa); }
 #flow-svg [data-nid][data-selected="true"] .node-shape { stroke: #6366f1; stroke-width: 3; }
 #flow-svg [data-eid][data-selected="true"] path:nth-child(2) { stroke: #6366f1; stroke-width: 3; marker-end: url(#arrow-sel); }
+/* Dark mode overrides */
+[data-theme="dark"] .fd-canvas { background:#0d1117; }
+[data-theme="dark"] .pal-btn:hover { background:#1e3a5f; border-color:#3b82f6; color:#93c5fd; }
+[data-theme="dark"] .connect-active { background:#1e3a5f !important; border-color:#3b82f6 !important; color:#93c5fd !important; }
 </style>
 
 @if (_designing is null)
@@ -76,14 +82,14 @@
                             <div class="card-body">
                                 <p class="text-muted small mb-2">@flow.Description</p>
                                 <div class="small text-muted">
-                                    <span class="me-3">🗂 @flow.Graph.Nodes.Count nodi</span>
-                                    <span>🔗 @flow.Graph.Edges.Count archi</span>
+                                    <span class="me-3">🗂 @flow.Graph.Nodes.Count @Loc["flows.nodes"]</span>
+                                    <span>🔗 @flow.Graph.Edges.Count @Loc["flows.edges"]</span>
                                 </div>
                                 <div class="small text-muted mt-1">v@flow.Version · @flow.UpdatedAt.ToString("dd/MM HH:mm")</div>
                             </div>
                             <div class="card-footer d-flex gap-2 flex-wrap">
                                 <button class="btn btn-outline-primary btn-sm" @onclick="() => OpenDesigner(flow)">✏ Design</button>
-                                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">▶ Avvia</button>
+                                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">@Loc["flows.run"]</button>
                                 <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditMeta(flow)">@Loc["edit"]</button>
                             </div>
                         </div>
@@ -96,7 +102,7 @@
         {
             <h4 class="mt-4">@Loc["flows.recent"]</h4>
             <table class="table table-sm table-hover">
-                <thead><tr><th>ID</th><th>Flow</th><th>Stato</th><th>Avviato</th><th>Completato</th></tr></thead>
+                <thead><tr><th>ID</th><th>Flow</th><th>@Loc["flows.col_status"]</th><th>@Loc["flows.started"]</th><th>@Loc["flows.completed"]</th></tr></thead>
                 <tbody>
                     @foreach (var run in _runs.Take(20))
                     {
@@ -119,37 +125,37 @@ else
     <div class="fd-wrap">
         <!-- Header bar -->
         <div class="fd-header">
-            <button class="btn btn-outline-secondary btn-sm" @onclick="CloseDesigner">← Back</button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CloseDesigner">@Loc["flows.back"]</button>
             <strong class="me-1" style="font-size:.95rem;">@_designing.Name</strong>
             @if (_isDirty)
             {
-                <span class="badge bg-warning text-dark">● non salvato</span>
+                <span class="badge bg-warning text-dark">@Loc["flows.unsaved"]</span>
             }
             else
             {
-                <span class="badge bg-success">✓ salvato</span>
+                <span class="badge bg-success">@Loc["flows.saved"]</span>
             }
             <div class="ms-auto d-flex gap-2 align-items-center">
                 @if (_connectMode)
                 {
                     <span class="badge bg-primary">
-                        🔗 @(_connectFromId is null ? "Click nodo sorgente…" : "Click nodo destinazione…")
+                        🔗 @(_connectFromId is null ? Loc["flows.connect_from"] : Loc["flows.connect_to"])
                     </span>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="CancelConnect">✕ Annulla</button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="CancelConnect">@Loc["flows.cancel_connect"]</button>
                 }
                 <button class="btn btn-outline-secondary btn-sm" @onclick="Undo"
-                        disabled="@(_undoStack.Count == 0)" title="Annulla (Ctrl+Z)">↩</button>
+                        disabled="@(_undoStack.Count == 0)" title="@Loc["flows.back"]">↩</button>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="Redo"
-                        disabled="@(_redoStack.Count == 0)" title="Ripeti (Ctrl+Y)">↪</button>
-                <button class="btn btn-primary btn-sm" @onclick="SaveGraph" disabled="@(!_isDirty)">💾 Salva</button>
-                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(_designing.Id)">▶ Avvia</button>
+                        disabled="@(_redoStack.Count == 0)">↪</button>
+                <button class="btn btn-primary btn-sm" @onclick="SaveGraph" disabled="@(!_isDirty)">@Loc["flows.save_btn"]</button>
+                <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(_designing.Id)">@Loc["flows.run"]</button>
             </div>
         </div>
 
         <div class="fd-body">
             <!-- Left palette -->
             <div class="fd-palette">
-                <div class="pal-section">Nodi</div>
+                <div class="pal-section">@Loc["flows.pal_nodes"]</div>
                 <button class="pal-btn" @onclick='() => AddNode(NodeType.Start)'>
                     <span class="pal-dot" style="background:#22c55e;"></span> Start
                 </button>
@@ -173,23 +179,23 @@ else
                 </button>
 
                 <div class="pal-sep"></div>
-                <div class="pal-section">Azioni</div>
+                <div class="pal-section">@Loc["flows.pal_actions"]</div>
 
                 <button class="pal-btn @(_connectMode ? "connect-active" : "")"
                         @onclick="ToggleConnect">
-                    🔗 Collega
+                    @Loc["flows.connect"]
                 </button>
 
                 @if (_selectedNodeId is not null || _selectedEdgeId is not null)
                 {
                     <button class="pal-btn" style="color:#ef4444;border-color:#fecaca;"
                             @onclick="DeleteSelected">
-                        🗑 Elimina
+                        @Loc["delete"]
                     </button>
                 }
 
                 <div class="pal-sep"></div>
-                <button class="pal-btn" @onclick="FitView">⊡ Fit View</button>
+                <button class="pal-btn" @onclick="FitView">@Loc["flows.fit_view"]</button>
             </div>
 
             <!-- SVG canvas -->
@@ -274,7 +280,7 @@ else
                             <select class="form-select form-select-sm"
                                     value="@(selNode.TemplateId?.ToString() ?? "")"
                                     @onchange="e => { selNode.TemplateId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : Guid.Parse(e.Value!.ToString()!); _isDirty = true; }">
-                                <option value="">— nessuno —</option>
+                                <option value="">@Loc["flows.none_option"]</option>
                                 @foreach (var t in _templates)
                                 {
                                     <option value="@t.Id">@t.Name (@t.Role)</option>
@@ -292,7 +298,7 @@ else
                     @if (selNode.Type == NodeType.HitlCheckpoint)
                     {
                         <div class="mb-2">
-                            <div class="prop-label">Tipo Checkpoint</div>
+                            <div class="prop-label">@Loc["flows.prop_cp_type"]</div>
                             <select class="form-select form-select-sm"
                                     value="@CfgStr(selNode, _kCpType, "Approval")"
                                     @onchange="e => { SetCfgStr(selNode, _kCpType, e.Value?.ToString()); }">
@@ -303,19 +309,19 @@ else
                             </select>
                         </div>
                         <div class="mb-2">
-                            <div class="prop-label">Titolo</div>
+                            <div class="prop-label">@Loc["flows.prop_title"]</div>
                             <input class="form-control form-control-sm"
                                    value="@CfgStr(selNode, _kTitle)"
                                    @oninput="e => SetCfgStr(selNode, _kTitle, e.Value?.ToString())" />
                         </div>
                         <div class="mb-2">
-                            <div class="prop-label">Descrizione</div>
+                            <div class="prop-label">@Loc["flows.prop_desc"]</div>
                             <textarea class="form-control form-control-sm" rows="3"
                                       value="@CfgStr(selNode, _kDesc)"
                                       @oninput="e => SetCfgStr(selNode, _kDesc, e.Value?.ToString())"></textarea>
                         </div>
                         <div class="mb-2">
-                            <div class="prop-label">Scadenza (ore)</div>
+                            <div class="prop-label">@Loc["flows.prop_expires"]</div>
                             <input type="number" class="form-control form-control-sm" min="1"
                                    value="@CfgInt(selNode, _kExpires, 24)"
                                    @oninput="e => SetCfgInt(selNode, _kExpires, e.Value?.ToString())" />
@@ -324,7 +330,7 @@ else
 
                     <div class="mt-3">
                         <button class="btn btn-danger btn-sm w-100"
-                                @onclick="DeleteSelected">🗑 Elimina nodo</button>
+                                @onclick="DeleteSelected">@Loc["flows.delete_node"]</button>
                     </div>
                 }
                 else if (selEdge is not null)
@@ -332,35 +338,35 @@ else
                     var fromN = _wNodes.FirstOrDefault(n => n.Id == selEdge.From);
                     var toN   = _wNodes.FirstOrDefault(n => n.Id == selEdge.To);
                     <div class="mb-2">
-                        <strong style="font-size:.85rem;">Arco</strong>
+                        <strong style="font-size:.85rem;">@Loc["flows.prop_edge"]</strong>
                     </div>
                     <div class="mb-2 small text-muted">
                         <code>@(fromN?.Label ?? selEdge.From)</code>
                         → <code>@(toN?.Label ?? selEdge.To)</code>
                     </div>
                     <div class="mb-2">
-                        <div class="prop-label">Condizione <span class="text-muted small">(opzionale)</span></div>
+                        <div class="prop-label">@Loc["flows.prop_condition"] <span class="text-muted small">(@Loc["flows.prop_cond_opt"])</span></div>
                         <input class="form-control form-control-sm font-monospace"
-                               placeholder="es. decision == 'Approved'"
+                               placeholder="@Loc["flows.prop_cond_ph"]"
                                value="@(selEdge.Condition ?? "")"
                                @oninput="e => { selEdge.Condition = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); _isDirty = true; }" />
-                        <div class="form-text small">Lascia vuoto = sempre percorribile</div>
+                        <div class="form-text small">@Loc["flows.prop_cond_hint"]</div>
                     </div>
                     <div class="mt-3">
                         <button class="btn btn-danger btn-sm w-100"
-                                @onclick="DeleteSelected">🗑 Elimina arco</button>
+                                @onclick="DeleteSelected">@Loc["flows.delete_edge"]</button>
                     </div>
                 }
                 else
                 {
                     <div class="text-muted small text-center mt-4" style="line-height:1.6">
                         <div style="font-size:1.8rem;margin-bottom:.5rem">↖</div>
-                        Click su un nodo o arco<br/>per modificarne le proprietà.
-                        <div class="mt-3 small text-start" style="background:#f8fafc;border-radius:8px;padding:.6rem .7rem">
-                            <div><strong>Drag</strong> — sposta nodi</div>
-                            <div><strong>Scroll</strong> — zoom</div>
-                            <div><strong>Drag canvas</strong> — pan</div>
-                            <div><strong>🔗 Collega</strong> — crea archi</div>
+                        @Loc["flows.hint_click"]
+                        <div class="mt-3 small text-start fd-hint-box">
+                            <div><strong>@Loc["flows.hint_drag"]</strong></div>
+                            <div><strong>@Loc["flows.hint_scroll"]</strong></div>
+                            <div><strong>@Loc["flows.hint_pan"]</strong></div>
+                            <div><strong>@Loc["flows.connect"]</strong></div>
                         </div>
                     </div>
                 }
@@ -445,48 +451,48 @@ else
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">▶ Avvia Flow</h5>
+                    <h5 class="modal-title">@Loc["flows.run_title"]</h5>
                     <button class="btn-close" @onclick="() => _showRunModal = false"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info small mb-3">
-                        Le variabili GitHub vengono passate come contesto a tutti gli agenti del flow.
+                        @Loc["flows.run_gh_hint"]
                     </div>
-                    <h6 class="fw-semibold mb-2">Configurazione GitHub</h6>
+                    <h6 class="fw-semibold mb-2">@Loc["flows.run_gh_config"]</h6>
                     <div class="row mb-3">
                         <div class="col">
-                            <label class="form-label">Repository <span class="text-muted small">(owner/repo)</span></label>
+                            <label class="form-label">@Loc["flows.run_repo"] <span class="text-muted small">(owner/repo)</span></label>
                             <input class="form-control" @bind="_runRepo" placeholder="es. myorg/my-project" />
                         </div>
                         <div class="col">
-                            <label class="form-label">Personal Access Token</label>
+                            <label class="form-label">@Loc["flows.run_pat"]</label>
                             <input type="password" class="form-control" @bind="_runPat" placeholder="ghp_…" />
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col">
-                            <label class="form-label">Branch di lavoro</label>
+                            <label class="form-label">@Loc["flows.run_branch"]</label>
                             <input class="form-control" @bind="_runBranch" placeholder="es. ai/feature-123" />
                         </div>
                         <div class="col">
-                            <label class="form-label">Branch base</label>
+                            <label class="form-label">@Loc["flows.run_base"]</label>
                             <input class="form-control" @bind="_runBaseBranch" placeholder="main" />
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Numero Issue GitHub <span class="text-muted small">(opzionale)</span></label>
+                        <label class="form-label">@Loc["flows.run_issue"] <span class="text-muted small">(@Loc["flows.prop_cond_opt"])</span></label>
                         <input type="number" class="form-control w-auto" @bind="_runIssue"
                                @bind:after="AutoFillBranch" min="1" placeholder="42" />
                     </div>
                     <details class="mt-2">
-                        <summary class="small text-muted">Variabili aggiuntive (JSON)</summary>
+                        <summary class="small text-muted">@Loc["flows.run_extras"]</summary>
                         <textarea class="form-control font-monospace mt-2" rows="3"
                                   @bind="_runExtra" placeholder="{&quot;key&quot;: &quot;value&quot;}"></textarea>
                     </details>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="() => _showRunModal = false">@Loc["cancel"]</button>
-                    <button class="btn btn-success" @onclick="ConfirmRun">▶ Avvia</button>
+                    <button class="btn btn-success" @onclick="ConfirmRun">@Loc["flows.run_confirm"]</button>
                 </div>
             </div>
         </div>
