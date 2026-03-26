@@ -33,7 +33,7 @@
                             <h6><code>/@skill.Slug</code> — @skill.Name</h6>
                             <p class="text-muted small mb-1">@skill.Description</p>
                             <span class="badge bg-secondary me-1">@skill.Type</span>
-                            <span class="badge bg-light text-dark me-1">@skill.Scope</span>
+                            <span class="badge bg-light me-1">@skill.Scope</span>
                             @if (skill.OwnerAgentId.HasValue)
                             {
                                 <span class="badge bg-info">@Loc["mcp.proposed"]</span>
@@ -79,7 +79,7 @@
                     <td><code>/@skill.Slug</code></td>
                     <td>@skill.Name</td>
                     <td><span class="badge bg-secondary">@skill.Type</span></td>
-                    <td><span class="badge bg-light text-dark">@skill.Scope</span></td>
+                    <td><span class="badge bg-light">@skill.Scope</span></td>
                     <td>@(skill.GroupId ?? "—")</td>
                     <td><span class="badge bg-@GetStatusColor(skill.Status)">@skill.Status</span></td>
                     <td>@skill.CreatedAt.ToString("dd/MM/yy")</td>
