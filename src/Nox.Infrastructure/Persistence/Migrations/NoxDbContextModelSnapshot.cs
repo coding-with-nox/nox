@@ -278,6 +278,10 @@ namespace Nox.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<string>("TriggerKeyHash")
+                        .HasColumnType("text")
+                        .HasColumnName("trigger_key_hash");
+
                     b.Property<string>("Variables")
                         .IsRequired()
                         .HasColumnType("jsonb")

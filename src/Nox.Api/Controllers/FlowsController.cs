@@ -8,6 +8,8 @@ using Nox.Domain.Flows;
 using Nox.Infrastructure.Persistence;
 using Nox.Orleans.GrainInterfaces;
 using Orleans;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace Nox.Api.Controllers;
@@ -105,6 +107,56 @@ public class FlowsController(
     {
         await flowService.CancelRunAsync(new CancelFlowRunCommand(runId, req.Reason ?? "Cancelled by user"));
         return Ok();
+    }
+
+    /// <summary>
+    /// Genera (o rigenera) il trigger key per un flow.
+    /// Restituisce la chiave in chiaro UNA SOLA VOLTA — viene salvato solo l'hash SHA-256.
+    /// </summary>
+    [HttpPost("{id:guid}/trigger-key")]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
+    public async Task<IActionResult> GenerateTriggerKey(Guid id)
+    {
+        var flow = await db.Flows.FindAsync(id);
+        if (flow is null) return NotFound();
+
+        var plainKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                              .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        flow.TriggerKeyHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plainKey)));
+        flow.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        return Ok(new { triggerKey = plainKey, flowId = id, note = "Salva questa chiave: non sarà mostrata di nuovo." });
+    }
+
+    /// <summary>
+    /// Endpoint pubblico per avviare un flow tramite trigger key.
+    /// Autenticato con header X-Flow-Trigger-Key (chiave in chiaro).
+    /// </summary>
+    [HttpPost("{id:guid}/trigger")]
+    [AllowAnonymous]
+    public async Task<IActionResult> TriggerRun(Guid id, [FromBody] StartFlowRunRequest req)
+    {
+        var flow = await db.Flows.FindAsync(id);
+        if (flow is null) return NotFound();
+
+        if (string.IsNullOrEmpty(flow.TriggerKeyHash))
+            return Unauthorized(new { error = "Nessun trigger key configurato per questo flow." });
+
+        if (!Request.Headers.TryGetValue("X-Flow-Trigger-Key", out var providedKey) || string.IsNullOrEmpty(providedKey))
+            return Unauthorized(new { error = "Header X-Flow-Trigger-Key mancante." });
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(providedKey.ToString())));
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(hash),
+                Encoding.UTF8.GetBytes(flow.TriggerKeyHash)))
+            return Unauthorized(new { error = "Trigger key non valido." });
+
+        if (!flow.Graph.Nodes.Any(n => n.NodeType == Nox.Domain.NodeType.Start))
+            return BadRequest("Il grafo del flow non ha un nodo Start.");
+
+        var run = await flowService.StartRunAsync(new StartFlowRunCommand(id, req.Variables));
+        return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
 }
 

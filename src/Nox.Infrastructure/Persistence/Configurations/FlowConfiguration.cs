@@ -45,6 +45,8 @@ public class FlowConfiguration : IEntityTypeConfiguration<Flow>
                 v => JsonConvert.SerializeObj(v),
                 v => JsonConvert.DeserializeObj(v)));
 
+        builder.Property(f => f.TriggerKeyHash).HasColumnName("trigger_key_hash");
+
         builder.HasIndex(f => f.ProjectId).HasDatabaseName("idx_flows_project");
         builder.HasIndex(f => f.Status).HasDatabaseName("idx_flows_status");
     }

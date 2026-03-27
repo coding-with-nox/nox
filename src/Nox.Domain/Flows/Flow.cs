@@ -15,6 +15,8 @@ public class Flow
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public required string CreatedBy { get; init; }
+    /// <summary>SHA-256 hex hash of the per-flow trigger key. Null = no trigger key configured.</summary>
+    public string? TriggerKeyHash { get; set; }
 }
 
 public class FlowRun

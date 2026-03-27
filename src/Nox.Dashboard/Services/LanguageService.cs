@@ -129,6 +129,15 @@ public class LanguageService
             ["flows.run_issue"]      = "Numero Issue GitHub",
             ["flows.run_extras"]     = "Variabili aggiuntive (JSON)",
             ["flows.run_confirm"]    = "▶ Avvia",
+            ["flows.cancel_run"]     = "Interrompi run",
+            // trigger key
+            ["flows.trigkey_btn"]    = "🔑 Trigger Key",
+            ["flows.trigkey_title"]  = "Trigger Key — Avvia Flow via API",
+            ["flows.trigkey_hint"]   = "Chiama POST /api/flows/{id}/trigger con header X-Flow-Trigger-Key per avviare il flow da sistemi esterni.",
+            ["flows.trigkey_gen"]    = "Genera nuova chiave",
+            ["flows.trigkey_copy"]   = "Copia",
+            ["flows.trigkey_warn"]   = "La chiave è mostrata una sola volta. Salvala subito.",
+            ["flows.trigkey_none"]   = "Nessuna trigger key configurata.",
             // agents
             ["agents.title"]    = "Agent Monitor",
             ["agents.filter"]   = "Filtra per Flow Run ID",
@@ -315,6 +324,15 @@ public class LanguageService
             ["flows.run_issue"]      = "GitHub Issue number",
             ["flows.run_extras"]     = "Extra variables (JSON)",
             ["flows.run_confirm"]    = "▶ Run",
+            ["flows.cancel_run"]     = "Stop run",
+            // trigger key
+            ["flows.trigkey_btn"]    = "🔑 Trigger Key",
+            ["flows.trigkey_title"]  = "Trigger Key — Run Flow via API",
+            ["flows.trigkey_hint"]   = "Call POST /api/flows/{id}/trigger with header X-Flow-Trigger-Key to start the flow from external systems.",
+            ["flows.trigkey_gen"]    = "Generate new key",
+            ["flows.trigkey_copy"]   = "Copy",
+            ["flows.trigkey_warn"]   = "The key is shown only once. Save it now.",
+            ["flows.trigkey_none"]   = "No trigger key configured.",
             // agents
             ["agents.title"]    = "Agent Monitor",
             ["agents.filter"]   = "Filter by Flow Run ID",

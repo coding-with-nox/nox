@@ -10,6 +10,7 @@
 @inject IDbContextFactory<NoxDbContext> DbFactory
 @inject IFlowEngine FlowEngine
 @inject IJSRuntime JS
+@inject IHttpClientFactory HttpFactory
 
 <PageTitle>@(_designing is not null ? _designing.Name : @Loc["flows.title"]) — Nox</PageTitle>
 
@@ -90,6 +91,7 @@
                             <div class="card-footer d-flex gap-2 flex-wrap">
                                 <button class="btn btn-outline-primary btn-sm" @onclick="() => OpenDesigner(flow)">✏ Design</button>
                                 <button class="btn btn-success btn-sm" @onclick="() => OpenRunModal(flow.Id)">@Loc["flows.run"]</button>
+                                <button class="btn btn-outline-warning btn-sm" @onclick="() => OpenTriggerKeyModal(flow)">@Loc["flows.trigkey_btn"]</button>
                                 <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="() => OpenEditMeta(flow)">@Loc["edit"]</button>
                             </div>
                         </div>
@@ -102,7 +104,7 @@
         {
             <h4 class="mt-4">@Loc["flows.recent"]</h4>
             <table class="table table-sm table-hover">
-                <thead><tr><th>ID</th><th>Flow</th><th>@Loc["flows.col_status"]</th><th>@Loc["flows.started"]</th><th>@Loc["flows.completed"]</th></tr></thead>
+                <thead><tr><th>ID</th><th>Flow</th><th>@Loc["flows.col_status"]</th><th>@Loc["flows.started"]</th><th>@Loc["flows.completed"]</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var run in _runs.Take(20))
                     {
@@ -112,6 +114,13 @@
                             <td><span class="badge bg-@GetRunColor(run.Status)">@run.Status</span></td>
                             <td>@run.StartedAt.ToString("dd/MM HH:mm")</td>
                             <td>@(run.CompletedAt?.ToString("HH:mm:ss") ?? "—")</td>
+                            <td>
+                                @if (run.Status == FlowRunStatus.Running || run.Status == FlowRunStatus.Paused)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelRun(run.Id)"
+                                            title="@Loc["flows.cancel_run"]">⏹</button>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -500,6 +509,52 @@ else
     <div class="modal-backdrop show"></div>
 }
 
+<!-- ── TRIGGER KEY MODAL ──────────────────────────────────────────── -->
+@if (_triggerKeyFlow is not null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Loc["flows.trigkey_title"]</h5>
+                    <button class="btn-close" @onclick="CloseTriggerKeyModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">@Loc["flows.trigkey_hint"]</p>
+                    @if (!string.IsNullOrEmpty(_triggerKeyPlain))
+                    {
+                        <div class="alert alert-warning small">@Loc["flows.trigkey_warn"]</div>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" value="@_triggerKeyPlain" readonly />
+                            <button class="btn btn-outline-secondary" @onclick="CopyTriggerKey">@Loc["flows.trigkey_copy"]</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">
+                            @(_triggerKeyFlow.TriggerKeyHash is not null
+                                ? "✅ Trigger key configurata (hash salvato nel DB)."
+                                : Loc["flows.trigkey_none"])
+                        </p>
+                    }
+                    @if (!string.IsNullOrEmpty(_triggerKeyError))
+                    {
+                        <div class="alert alert-danger small mt-2">@_triggerKeyError</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseTriggerKeyModal">@Loc["cancel"]</button>
+                    <button class="btn btn-warning" @onclick="GenerateTriggerKey" disabled="@_triggerKeyLoading">
+                        @if (_triggerKeyLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        @Loc["flows.trigkey_gen"]
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
 @code {
     // ── Domain data ────────────────────────────────────────────────────
     private List<Flow> _flows = [];
@@ -525,6 +580,12 @@ else
     private string _runBranch = string.Empty, _runBaseBranch = "main";
     private int? _runIssue;
     private string _runExtra = string.Empty;
+
+    // ── Trigger key modal ──────────────────────────────────────────────
+    private Flow? _triggerKeyFlow;
+    private string _triggerKeyPlain = string.Empty;
+    private string _triggerKeyError = string.Empty;
+    private bool _triggerKeyLoading;
 
     // ── Designer state ─────────────────────────────────────────────────
     private Flow? _designing;
@@ -853,6 +914,54 @@ else
             : $"ai/flow-{DateTimeOffset.UtcNow:yyyyMMdd-HHmm}";
     }
 
+    // ── Cancel run ─────────────────────────────────────────────────────
+    private async Task CancelRun(Guid runId)
+    {
+        var http = HttpFactory.CreateClient("NoxApi");
+        await http.PostAsJsonAsync($"/api/flows/runs/{runId}/cancel", new { reason = "Cancellato dall'utente" });
+        await LoadData();
+    }
+
+    // ── Trigger key ────────────────────────────────────────────────────
+    private void OpenTriggerKeyModal(Flow flow)
+    {
+        _triggerKeyFlow  = flow;
+        _triggerKeyPlain = string.Empty;
+        _triggerKeyError = string.Empty;
+    }
+
+    private void CloseTriggerKeyModal()
+    {
+        _triggerKeyFlow  = null;
+        _triggerKeyPlain = string.Empty;
+    }
+
+    private async Task GenerateTriggerKey()
+    {
+        if (_triggerKeyFlow is null) return;
+        _triggerKeyLoading = true;
+        _triggerKeyError   = string.Empty;
+        _triggerKeyPlain   = string.Empty;
+        try
+        {
+            var http = HttpFactory.CreateClient("NoxApi");
+            var resp = await http.PostAsync($"/api/flows/{_triggerKeyFlow.Id}/trigger-key", null);
+            if (!resp.IsSuccessStatusCode) { _triggerKeyError = $"Errore: {resp.StatusCode}"; return; }
+            var body = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            _triggerKeyPlain = body.GetProperty("triggerKey").GetString() ?? string.Empty;
+            // aggiorna il flag nell'oggetto in-memory così la UI si aggiorna
+            _triggerKeyFlow.TriggerKeyHash = "set";
+            await LoadData();
+            _triggerKeyFlow = _flows.FirstOrDefault(f => f.Id == _triggerKeyFlow!.Id);
+        }
+        catch (Exception ex) { _triggerKeyError = ex.Message; }
+        finally { _triggerKeyLoading = false; }
+    }
+
+    private async Task CopyTriggerKey()
+        => await JS.InvokeVoidAsync("navigator.clipboard.writeText", _triggerKeyPlain);
+
+    // ── Run ────────────────────────────────────────────────────────────
     private async Task ConfirmRun()
     {
         _showRunModal = false;

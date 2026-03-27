@@ -202,18 +202,37 @@ public class FlowGrain(
 
         state.State.SpawnedAgentIds.Add(agentId);
 
+        // GrainCancellationTokenSource must be created inside the Orleans execution context (before Task.Run)
+        var cts = new GrainCancellationTokenSource();
+        var capturedNodeId  = node.Id;
+        var capturedRunId   = state.State.FlowRunId;
+        var capturedPayload = variables;
+        var flowRef = this.AsReference<IFlowGrain>();
+
         // Execute task asynchronously (fire and forget — grain will call AdvanceAsync when done)
         _ = Task.Run(async () =>
         {
-            var ct = new GrainCancellationTokenSource();
-            var result = await agent.ExecuteTaskAsync(new TaskInput
+            try
             {
-                FlowNodeId = node.Id,
-                FlowRunId = state.State.FlowRunId,
-                Payload = variables
-            }, ct.Token);
+                var result = await agent.ExecuteTaskAsync(new TaskInput
+                {
+                    FlowNodeId = capturedNodeId,
+                    FlowRunId  = capturedRunId,
+                    Payload    = capturedPayload
+                }, cts.Token);
 
-            await this.AsReference<IFlowGrain>().AdvanceAsync(node.Id, result);
+                await flowRef.AdvanceAsync(capturedNodeId, result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unhandled error in background agent task for node {NodeId}", capturedNodeId);
+                await flowRef.AdvanceAsync(capturedNodeId, new TaskResult
+                {
+                    TaskId  = Guid.NewGuid(),
+                    Success = false,
+                    Error   = ex.Message
+                });
+            }
         });
 
         await PublishEventAsync("agent.spawned", node.Id, new JsonObject { ["agentId"] = agentId.ToString() });
