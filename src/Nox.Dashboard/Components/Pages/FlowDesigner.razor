@@ -114,7 +114,9 @@
                             <td><span class="badge bg-@GetRunColor(run.Status)">@run.Status</span></td>
                             <td>@run.StartedAt.ToString("dd/MM HH:mm")</td>
                             <td>@(run.CompletedAt?.ToString("HH:mm:ss") ?? "—")</td>
-                            <td>
+                            <td class="d-flex gap-1">
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => OpenRunModal(run.FlowId)"
+                                        title="@Loc["flows.run_title"]">⚙</button>
                                 @if (run.Status == FlowRunStatus.Running || run.Status == FlowRunStatus.Paused)
                                 {
                                     <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelRun(run.Id)"
