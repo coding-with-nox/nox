@@ -56,6 +56,9 @@ public class FlowGrain(
 
     public async Task AdvanceAsync(string completedNodeId, TaskResult result)
     {
+        if (state.State.Status is FlowRunStatus.Cancelled or FlowRunStatus.Failed or FlowRunStatus.Completed)
+            return;
+
         var graph = JsonSerializer.Deserialize<FlowGraph>(state.State.FlowGraphJson)!;
 
         // Store node result
