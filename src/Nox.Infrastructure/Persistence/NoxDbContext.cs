@@ -18,6 +18,7 @@ public class NoxDbContext(DbContextOptions<NoxDbContext> options) : DbContext(op
     public DbSet<Agent>           Agents         => Set<Agent>();
     public DbSet<Flow>            Flows          => Set<Flow>();
     public DbSet<FlowRun>         FlowRuns       => Set<FlowRun>();
+    public DbSet<FlowRunConfig>   FlowRunConfigs => Set<FlowRunConfig>();
     public DbSet<AgentTask>       AgentTasks     => Set<AgentTask>();
     public DbSet<HitlCheckpoint>  HitlCheckpoints => Set<HitlCheckpoint>();
     public DbSet<Skill>           Skills         => Set<Skill>();

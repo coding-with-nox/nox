@@ -52,6 +52,24 @@ public class FlowConfiguration : IEntityTypeConfiguration<Flow>
     }
 }
 
+public class FlowRunConfigConfiguration : IEntityTypeConfiguration<FlowRunConfig>
+{
+    public void Configure(EntityTypeBuilder<FlowRunConfig> builder)
+    {
+        builder.ToTable("flow_run_configs");
+        builder.HasKey(c => c.FlowId);
+        builder.Property(c => c.FlowId).HasColumnName("flow_id");
+        builder.Property(c => c.GithubRepo).HasColumnName("github_repo");
+        builder.Property(c => c.GithubPat).HasColumnName("github_pat");
+        builder.Property(c => c.GithubPatHash).HasColumnName("github_pat_hash");
+        builder.Property(c => c.GithubBranch).HasColumnName("github_branch");
+        builder.Property(c => c.GithubBaseBranch).HasColumnName("github_base_branch");
+        builder.Property(c => c.GithubIssueNumber).HasColumnName("github_issue_number");
+        builder.Property(c => c.ExtraVariables).HasColumnName("extra_variables");
+        builder.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+    }
+}
+
 public class FlowRunConfiguration : IEntityTypeConfiguration<FlowRun>
 {
     public void Configure(EntityTypeBuilder<FlowRun> builder)

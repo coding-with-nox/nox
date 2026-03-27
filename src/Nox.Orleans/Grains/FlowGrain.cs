@@ -1,9 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nox.Domain;
 using Nox.Domain.Agents;
 using Nox.Domain.Flows;
 using Nox.Domain.Hitl;
+using Nox.Infrastructure.Persistence;
 using Nox.Orleans.GrainInterfaces;
 using Nox.Orleans.States;
 using Orleans;
@@ -87,6 +89,7 @@ public class FlowGrain(
             state.State.Status = FlowRunStatus.Failed;
             state.State.Error = result.Error;
             await state.WriteStateAsync();
+            await SyncRunStatusToDbAsync(FlowRunStatus.Failed, result.Error);
             await PublishEventAsync("flow.failed", completedNodeId);
             return;
         }
@@ -115,6 +118,7 @@ public class FlowGrain(
             state.State.Status = FlowRunStatus.Completed;
             state.State.CompletedAt = DateTimeOffset.UtcNow;
             await state.WriteStateAsync();
+            await SyncRunStatusToDbAsync(FlowRunStatus.Completed);
             await PublishEventAsync("flow.completed", completedNodeId);
             logger.LogInformation("Flow run {FlowRunId} completed", state.State.FlowRunId);
         }
@@ -130,6 +134,7 @@ public class FlowGrain(
                 state.State.CurrentNodeIds.Remove(node.Id);
                 state.State.Status = FlowRunStatus.Completed;
                 state.State.CompletedAt = DateTimeOffset.UtcNow;
+                await SyncRunStatusToDbAsync(FlowRunStatus.Completed);
                 await PublishEventAsync("flow.completed", node.Id);
                 break;
 
@@ -348,6 +353,7 @@ public class FlowGrain(
         state.State.Status = FlowRunStatus.Cancelled;
         state.State.Error = reason;
         await state.WriteStateAsync();
+        await SyncRunStatusToDbAsync(FlowRunStatus.Cancelled, reason);
         await PublishEventAsync("flow.cancelled", "system");
         logger.LogInformation("Flow run {FlowRunId} cancelled: {Reason}", state.State.FlowRunId, reason);
     }
@@ -418,6 +424,27 @@ public class FlowGrain(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to publish flow event {EventType}", eventType);
+        }
+    }
+
+    private async Task SyncRunStatusToDbAsync(FlowRunStatus status, string? error = null)
+    {
+        try
+        {
+            var factory = ServiceProvider.GetService<IDbContextFactory<NoxDbContext>>();
+            if (factory is null) return;
+            await using var db = await factory.CreateDbContextAsync();
+            var run = await db.FlowRuns.FindAsync(state.State.FlowRunId);
+            if (run is null) return;
+            run.Status = status;
+            if (status is FlowRunStatus.Completed or FlowRunStatus.Failed or FlowRunStatus.Cancelled)
+                run.CompletedAt = state.State.CompletedAt ?? DateTimeOffset.UtcNow;
+            if (error is not null) run.Error = error;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to sync run status to DB for run {RunId}", state.State.FlowRunId);
         }
     }
 }

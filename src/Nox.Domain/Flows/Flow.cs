@@ -31,6 +31,22 @@ public class FlowRun
     public string? Error { get; set; }
 }
 
+/// <summary>Persisted GitHub/run configuration per flow. PAT stored plain text (auth-protected); hash for UI display only.</summary>
+public class FlowRunConfig
+{
+    public Guid FlowId { get; init; }
+    public string? GithubRepo { get; set; }
+    /// <summary>Plain-text PAT — never returned by GET endpoints; only used server-side when injecting into run variables.</summary>
+    public string? GithubPat { get; set; }
+    /// <summary>SHA-256 hex hash of GithubPat. Used by UI to show "PAT configurato" without exposing the value.</summary>
+    public string? GithubPatHash { get; set; }
+    public string? GithubBranch { get; set; }
+    public string? GithubBaseBranch { get; set; }
+    public int? GithubIssueNumber { get; set; }
+    public string? ExtraVariables { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public class FlowEvent
 {
     public required Guid FlowRunId { get; init; }

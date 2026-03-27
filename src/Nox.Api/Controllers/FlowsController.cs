@@ -89,7 +89,16 @@ public class FlowsController(
         if (!flow.Graph.Nodes.Any(n => n.NodeType == Nox.Domain.NodeType.Start))
             return BadRequest("Il grafo del flow non ha un nodo Start. Crea un nuovo flow dal designer.");
 
-        var run = await flowService.StartRunAsync(new StartFlowRunCommand(id, req.Variables));
+        // Inject stored PAT if not provided in variables
+        var vars = req.Variables ?? new JsonObject();
+        if (!vars.ContainsKey("github_pat") || string.IsNullOrWhiteSpace(vars["github_pat"]?.GetValue<string>()))
+        {
+            var cfg = await db.FlowRunConfigs.FindAsync(id);
+            if (cfg?.GithubPat is not null)
+                vars["github_pat"] = cfg.GithubPat;
+        }
+
+        var run = await flowService.StartRunAsync(new StartFlowRunCommand(id, vars));
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
 
@@ -105,8 +114,63 @@ public class FlowsController(
     [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
     public async Task<IActionResult> CancelRun(Guid runId, [FromBody] CancelRunRequest req)
     {
-        await flowService.CancelRunAsync(new CancelFlowRunCommand(runId, req.Reason ?? "Cancelled by user"));
+        var reason = req.Reason ?? "Cancelled by user";
+        await flowService.CancelRunAsync(new CancelFlowRunCommand(runId, reason));
+
+        var dbRun = await db.FlowRuns.FindAsync(runId);
+        if (dbRun is not null)
+        {
+            dbRun.Status = FlowRunStatus.Cancelled;
+            dbRun.CompletedAt = DateTimeOffset.UtcNow;
+            dbRun.Error = reason;
+            await db.SaveChangesAsync();
+        }
+
         return Ok();
+    }
+
+    [HttpGet("{id:guid}/run-config")]
+    public async Task<IActionResult> GetRunConfig(Guid id)
+    {
+        var cfg = await db.FlowRunConfigs.FindAsync(id);
+        if (cfg is null) return Ok(new { patConfigured = false });
+        return Ok(new
+        {
+            githubRepo        = cfg.GithubRepo,
+            patConfigured     = !string.IsNullOrEmpty(cfg.GithubPatHash),
+            githubBranch      = cfg.GithubBranch,
+            githubBaseBranch  = cfg.GithubBaseBranch,
+            githubIssueNumber = cfg.GithubIssueNumber,
+            extraVariables    = cfg.ExtraVariables
+        });
+    }
+
+    [HttpPut("{id:guid}/run-config")]
+    [Authorize(Policy = NoxPolicies.ManagerOrAdmin)]
+    public async Task<IActionResult> SaveRunConfig(Guid id, [FromBody] SaveRunConfigRequest req)
+    {
+        var cfg = await db.FlowRunConfigs.FindAsync(id);
+        if (cfg is null)
+        {
+            cfg = new FlowRunConfig { FlowId = id };
+            db.FlowRunConfigs.Add(cfg);
+        }
+
+        cfg.GithubRepo        = req.GithubRepo;
+        cfg.GithubBranch      = req.GithubBranch;
+        cfg.GithubBaseBranch  = req.GithubBaseBranch;
+        cfg.GithubIssueNumber = req.GithubIssueNumber;
+        cfg.ExtraVariables    = req.ExtraVariables;
+        cfg.UpdatedAt         = DateTimeOffset.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(req.GithubPat))
+        {
+            cfg.GithubPat     = req.GithubPat;
+            cfg.GithubPatHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(req.GithubPat)));
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new { patConfigured = !string.IsNullOrEmpty(cfg.GithubPatHash) });
     }
 
     /// <summary>
@@ -164,3 +228,4 @@ public record CreateFlowRequest(string Name, string? Description, Guid ProjectId
 public record UpdateFlowRequest(string? Name, string? Description, FlowGraph? Graph);
 public record StartFlowRunRequest(JsonObject? Variables);
 public record CancelRunRequest(string? Reason);
+public record SaveRunConfigRequest(string? GithubRepo, string? GithubPat, string? GithubBranch, string? GithubBaseBranch, int? GithubIssueNumber, string? ExtraVariables);
